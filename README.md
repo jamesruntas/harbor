@@ -447,6 +447,8 @@ tailscale.com/tsnet               — Embedded Tailscale node for zero-config re
 
 - **tsnet-state path is relative** — `server\main.go` uses `tsnet-state` as a relative directory. The server sets `cmd.Dir` to the binary's own directory at launch, so this resolves correctly. Do not move the server binary without also moving `tsnet-state\`.
 
+- **FFmpeg HEIC thumbnailing** — `-vf "scale=200:-1"` fails on HEIC due to multiple embedded image streams. Use `-filter_complex "[0:v:0]scale=200:-1[out]" -map "[out]"` instead. This selects the first video stream explicitly and works universally across JPEG, PNG, HEIC, MP4, and MOV.
+
 - **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames, which are reserved on Windows. HomeStream must sanitise filenames at ingestion (not yet implemented).
 
 - **Incomplete transfers** — iOS can transfer incomplete files if a photo is still processing after capture. HomeStream must handle partial files gracefully (not yet implemented).

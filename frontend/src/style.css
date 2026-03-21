@@ -1,9 +1,21 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+:root {
+  --bg:        #222222;
+  --bg-raised: #2c2c2c;
+  --bg-card:   #2c2c2c;
+  --border:    #3a3a3a;
+  --text:      #fbfaef;
+  --text-muted:#bbcde5;
+  --text-dim:  #7a96b0;
+  --accent:    #1c5d99;
+  --accent-hover: #23967f;
+}
+
 html, body, #app {
   height: 100%;
-  background: #111827;
-  color: #f9fafb;
+  background: var(--bg);
+  color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
 }
@@ -21,8 +33,8 @@ html, body, #app {
   justify-content: space-between;
   padding: 0 20px;
   height: 52px;
-  background: #1f2937;
-  border-bottom: 1px solid #374151;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -30,7 +42,7 @@ html, body, #app {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #f9fafb;
+  color: var(--text);
 }
 
 .header-right {
@@ -40,21 +52,22 @@ html, body, #app {
 }
 
 .count {
-  color: #9ca3af;
+  color: var(--text-muted);
   font-size: 13px;
 }
 
 .index-btn {
   padding: 6px 14px;
-  background: #3b82f6;
-  color: #fff;
+  background: var(--accent);
+  color: var(--text);
   border: none;
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
+  transition: background 0.15s;
 }
 
-.index-btn:hover:not(:disabled) { background: #2563eb; }
+.index-btn:hover:not(:disabled) { background: var(--accent-hover); }
 .index-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* ── Main ── */
@@ -65,12 +78,12 @@ html, body, #app {
 }
 
 .status {
-  color: #9ca3af;
+  color: var(--text-muted);
   text-align: center;
   margin-top: 60px;
 }
 
-.status.error { color: #f87171; }
+.status.error { color: #e07070; }
 
 /* ── Grid ── */
 .grid {
@@ -80,24 +93,45 @@ html, body, #app {
 }
 
 .card {
-  background: #1f2937;
+  background: var(--bg-card);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #374151;
+  border: 1px solid var(--border);
 }
 
 .card-thumb {
+  position: relative;
   height: 120px;
-  background: #374151;
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.card-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.play-icon {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 4px;
+  padding: 2px 5px;
+  pointer-events: none;
 }
 
 .card-ext {
   font-size: 11px;
   font-weight: 700;
-  color: #6b7280;
+  color: var(--text-dim);
   letter-spacing: 0.08em;
 }
 
@@ -108,7 +142,7 @@ html, body, #app {
 .card-name {
   font-size: 12px;
   font-weight: 500;
-  color: #e5e7eb;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -117,11 +151,11 @@ html, body, #app {
 
 .card-date {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--text-muted);
   margin-bottom: 2px;
 }
 
 .card-camera {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-dim);
 }

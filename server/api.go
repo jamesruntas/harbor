@@ -9,6 +9,7 @@ import (
 )
 
 type MediaItem struct {
+	ID        int64   `json:"id"`
 	Filename  string  `json:"filename"`
 	DateTaken string  `json:"date_taken"`
 	Latitude  float64 `json:"latitude,omitempty"`
@@ -26,7 +27,7 @@ type job struct {
 	errMsg  string
 }
 
-func (j *job) start(folderPath string, db *sql.DB) {
+func (j *job) start(folderPath string, db *sql.DB, thumb *Thumbnailer) {
 	j.mu.Lock()
 	j.status = "running"
 	j.indexed = 0
@@ -34,7 +35,7 @@ func (j *job) start(folderPath string, db *sql.DB) {
 	j.mu.Unlock()
 
 	go func() {
-		err := indexFolder(folderPath, db, func() {
+		err := indexFolder(folderPath, db, thumb, func() {
 			j.mu.Lock()
 			j.indexed++
 			j.mu.Unlock()
@@ -50,7 +51,7 @@ func (j *job) start(folderPath string, db *sql.DB) {
 	}()
 }
 
-func registerHandlers(mux *http.ServeMux, db *sql.DB) {
+func registerHandlers(mux *http.ServeMux, db *sql.DB, thumb *Thumbnailer) {
 	j := &job{status: "idle"}
 
 	// GET /api/media?offset=0 — paginated media list (100 per page)
@@ -61,7 +62,7 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB) {
 		var total int
 		db.QueryRow(`SELECT COUNT(*) FROM media`).Scan(&total)
 
-		rows, err := db.Query(`SELECT filename, date_taken, latitude, longitude, make, model
+		rows, err := db.Query(`SELECT id, filename, date_taken, latitude, longitude, make, model
 			FROM media ORDER BY date_taken DESC LIMIT ? OFFSET ?`, pageSize, offset)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -72,7 +73,7 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB) {
 		var items []MediaItem
 		for rows.Next() {
 			var item MediaItem
-			rows.Scan(&item.Filename, &item.DateTaken, &item.Latitude, &item.Longitude, &item.Make, &item.Model)
+			rows.Scan(&item.ID, &item.Filename, &item.DateTaken, &item.Latitude, &item.Longitude, &item.Make, &item.Model)
 			items = append(items, item)
 		}
 		if items == nil {
@@ -103,7 +104,7 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB) {
 			return
 		}
 
-		j.start(path, db)
+		j.start(path, db, thumb)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"started"}`))
@@ -123,5 +124,15 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB) {
 			"indexed": indexed,
 			"error":   errMsg,
 		})
+	})
+
+	// GET /api/thumbnail/{id} — serve cached thumbnail JPEG
+	mux.HandleFunc("GET /api/thumbnail/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		thumb.serve(w, r, id)
 	})
 }

@@ -16,6 +16,10 @@ const (
 	tsHostname = "homestream"
 	tsnetDir   = "tsnet-state"
 	dbPath     = "../homestream.db"
+	// TODO: replace hardcoded paths with filepath.Join(filepath.Dir(os.Executable()), "tools", ...)
+	// once the installer bundles these binaries alongside server.exe.
+	ffmpegPath = `C:\Users\James\HarborTools\ffmpeg.exe`
+	thumbDir   = "thumbnails"
 )
 
 // dedupLogger returns a Logf func that prints each unique message only once.
@@ -37,9 +41,10 @@ func dedupLogger() logger.Logf {
 
 func main() {
 	db := initDB(dbPath)
+	thumb := newThumbnailer(ffmpegPath, thumbDir)
 
 	mux := http.NewServeMux()
-	registerHandlers(mux, db)
+	registerHandlers(mux, db, thumb)
 
 	// Local listener — used by the Wails UI
 	go func() {

@@ -1,3 +1,7 @@
 build/bin
 node_modules
 frontend/dist
+server/thumbnails
+server/server.exe
+server/tools/
+*.db

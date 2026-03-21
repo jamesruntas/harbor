@@ -97,7 +97,14 @@ export default function App() {
               {items.map((item) => (
                 <div key={item.filename} className="card">
                   <div className="card-thumb">
-                    <span className="card-ext">{item.filename.split('.').pop().toUpperCase()}</span>
+                    <img
+                      src={`http://127.0.0.1:4242/api/thumbnail/${item.id}`}
+                      alt={item.filename}
+                      onError={e => { e.currentTarget.style.display = 'none' }}
+                    />
+                    {/\.(mp4|mov)$/i.test(item.filename) && (
+                      <span className="play-icon">▶</span>
+                    )}
                   </div>
                   <div className="card-info">
                     <p className="card-name" title={item.filename}>{item.filename}</p>
