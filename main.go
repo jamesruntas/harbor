@@ -13,7 +13,9 @@ var assets embed.FS
 
 func main() {
 	// Create an instance of the app structure
-	app := NewApp()
+	app := &App{
+    db: initDB("homestream.db"),
+	}
 
 	// Create application with options
 	err := wails.Run(&options.App{
