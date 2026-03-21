@@ -2,11 +2,7 @@ module harbor
 
 go 1.23
 
-require (
-	github.com/barasher/go-exiftool v1.10.0
-	github.com/mattn/go-sqlite3 v1.14.37
-	github.com/wailsapp/wails/v2 v2.11.0
-)
+require github.com/wailsapp/wails/v2 v2.11.0
 
 require (
 	github.com/bep/debounce v1.2.1 // indirect

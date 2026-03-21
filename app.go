@@ -2,108 +2,101 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
-
-	exiftool "github.com/barasher/go-exiftool"
-	_ "github.com/mattn/go-sqlite3"
 )
-func initDB(path string) *sql.DB {
-    db, err := sql.Open("sqlite3", path)
-    if err != nil {
-        log.Fatal(err)
-    }
-    db.Exec(`CREATE TABLE IF NOT EXISTS media (
-        id        INTEGER PRIMARY KEY AUTOINCREMENT,
-        path      TEXT UNIQUE,
-        filename  TEXT,
-        date_taken TEXT,
-        latitude  REAL,
-        longitude REAL,
-        make      TEXT,
-        model     TEXT
-    )`)
-    return db
-}
 
-func indexFolder(folderPath string, db *sql.DB) error {
-    et, err := exiftool.NewExiftool()
-    if err != nil {
-        return fmt.Errorf("exiftool init failed: %w", err)
-    }
-    defer et.Close()
-
-    return filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
-        if err != nil || info.IsDir() {
-            return err
-        }
-
-        ext := filepath.Ext(path)
-        switch ext {
-        case ".jpg", ".jpeg", ".png", ".heic", ".mp4", ".mov":
-            // continue
-        default:
-            return nil
-        }
-
-        results := et.ExtractMetadata(path)
-        if len(results) == 0 || results[0].Err != nil {
-            return nil
-        }
-        m := results[0]
-
-        getString := func(key string) string {
-            if v, ok := m.Fields[key]; ok {
-                return fmt.Sprintf("%v", v)
-            }
-            return ""
-        }
-        getFloat := func(key string) float64 {
-            if v, ok := m.Fields[key]; ok {
-                switch n := v.(type) {
-                case float64:
-                    return n
-                }
-            }
-            return 0
-        }
-
-        _, err = db.Exec(`INSERT OR IGNORE INTO media
-            (path, filename, date_taken, latitude, longitude, make, model)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            path,
-            filepath.Base(path),
-            getString("DateTimeOriginal"),
-            getFloat("GPSLatitude"),
-            getFloat("GPSLongitude"),
-            getString("Make"),
-            getString("Model"),
-        )
-        if err != nil {
-            log.Printf("db insert error for %s: %v", path, err)
-        } else {
-            log.Printf("indexed: %s", filepath.Base(path))
-        }
-        return nil
-    })
-}
+const serverBase = "http://127.0.0.1:4242"
 
 type App struct {
-    ctx context.Context
-    db  *sql.DB
+	ctx       context.Context
+	serverCmd *exec.Cmd
+}
+
+// findServerBinary looks for the server binary next to the running executable
+// (production) or in the server/ subdirectory relative to the working directory
+// (development — run `go build -o server.exe .` inside server/ first).
+func findServerBinary() (string, error) {
+	if exe, err := os.Executable(); err == nil {
+		candidate := filepath.Join(filepath.Dir(exe), "server.exe")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		candidate := filepath.Join(cwd, "server", "server.exe")
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("server binary not found — build it first: cd server && go build -o server.exe .")
 }
 
 func (a *App) startup(ctx context.Context) {
-    a.ctx = ctx
+	a.ctx = ctx
+
+	bin, err := findServerBinary()
+	if err != nil {
+		log.Printf("startup: %v", err)
+		return
+	}
+
+	cmd := exec.Command(bin)
+	cmd.Dir = filepath.Dir(bin) // server resolves ../homestream.db relative to its own location
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		log.Printf("startup: failed to start server: %v", err)
+		return
+	}
+
+	a.serverCmd = cmd
+	log.Printf("startup: server started (pid %d)", cmd.Process.Pid)
 }
 
+func (a *App) shutdown(ctx context.Context) {
+	if a.serverCmd != nil && a.serverCmd.Process != nil {
+		log.Printf("shutdown: stopping server (pid %d)", a.serverCmd.Process.Pid)
+		a.serverCmd.Process.Kill()
+	}
+}
+
+// IndexFolder triggers the server to index a folder.
 func (a *App) IndexFolder(path string) string {
-    err := indexFolder(path, a.db)
-    if err != nil {
-        return fmt.Sprintf("Error: %v", err)
-    }
-    return "Done"
+	resp, err := http.PostForm(serverBase+"/api/index", url.Values{"path": {path}})
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return string(body)
+}
+
+// GetIndexStatus returns the current indexing job state as a JSON string.
+func (a *App) GetIndexStatus() string {
+	resp, err := http.Get(serverBase + "/api/index/status")
+	if err != nil {
+		return `{"status":"error","error":"server unreachable"}`
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return string(body)
+}
+
+// GetMedia returns one page of indexed media as a JSON string.
+func (a *App) GetMedia(offset int) string {
+	resp, err := http.Get(fmt.Sprintf("%s/api/media?offset=%d", serverBase, offset))
+	if err != nil {
+		return fmt.Sprintf("Error: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	return string(body)
 }
