@@ -204,11 +204,15 @@ Pre-build validation before writing production code. All critical items done.
 #### Media Engine
 - [x] ExifTool integration — extract date, GPS, make, model per file
 - [x] SQLite schema — media table with path, filename, date_taken, latitude, longitude, make, model
-- [x] Async indexing with progress reporting
-- [ ] File watcher (fsnotify) monitoring `C:\PhoneMedia` — auto-index on new files
-- [ ] libvips thumbnail generation — multiple sizes (thumb, preview, full)
-- [ ] Thumbnail cache management
-- [ ] FFmpeg streaming endpoint
+- [x] Async indexing with job state — `POST /api/index` returns immediately, poll `/api/index/status`
+- [x] Case-insensitive extension matching — handles `.MOV`, `.HEIC`, `.JPG` from iPhone
+- [x] Silent drop fix — ExifTool errors log and insert with empty metadata rather than skipping
+- [x] Video date fix — falls back to `CreateDate` when `DateTimeOriginal` absent (MP4/MOV)
+- [x] FFmpeg thumbnail generation — 200px JPEG, 4-worker pool, skip-if-cached, async per file
+- [x] Thumbnail cache — `server/thumbnails/{id}.jpg`, keyed by DB id
+- [ ] Preview size thumbnail (800px) — deferred until lightbox view
+- [ ] File watcher (fsnotify) — auto-index on new files arriving in `C:\PhoneMedia`
+- [ ] FFmpeg video streaming endpoint
 - [ ] TMDB metadata scraper for movies and TV
 
 #### Google Takeout Importer
@@ -228,21 +232,30 @@ Pre-build validation before writing production code. All critical items done.
 - [ ] Storage Saver prompt — Google free tier as offsite redundancy
 
 #### Dashboard UI (Wails + React)
-- [x] Photo grid with card layout (filename, date, camera model)
-- [x] Paginated media list (100 per page, Load more)
-- [x] Index button with live progress counter ("Indexing… 42 files")
-- [ ] Real thumbnails (requires libvips — cards currently show file extension placeholder)
-- [ ] Date-based browsing (year/month)
+- [x] Photo grid with real thumbnails (FFmpeg-generated JPEG)
+- [x] Video cards — play icon overlay, first-frame thumbnail
+- [x] Paginated media list (100 per page, "Load more N remaining")
+- [x] Index button with live file counter ("Indexing… 42 files")
+- [x] Error state clears automatically on server recovery
+- [x] Color palette — `#222222 / #1c5d99 / #bbcde5 / #fbfaef / #23967f`
+- [ ] Date-based browsing (year/month grouping)
 - [ ] Basic search (filename, date range)
 - [ ] Movie and TV library view
-- [ ] Settings panel
+- [ ] Settings panel (configurable media folder, tool paths)
 - [ ] Backup status widget
 
 #### Installer
 - [ ] Inno Setup installer
-- [ ] ExifTool bundled alongside server.exe (replace hardcoded path)
-- [ ] FFmpeg bundled
+- [ ] ExifTool bundled in `tools\` alongside server.exe (replace hardcoded path)
+- [ ] FFmpeg bundled in `tools\` alongside server.exe (replace hardcoded path)
 - [ ] First-run onboarding wizard
+
+#### Remote Access *(pulled forward from Phase 2)*
+- [x] tsnet integration — embedded Tailscale node in server binary
+- [x] Zero-config remote access — reachable at `http://homestream/` with no router config
+- [x] Auth state persisted in `server\tsnet-state\` — no re-auth on restart
+- [ ] QR code generation for iOS pairing
+- [ ] Auth token / API key for iOS requests
 
 ---
 
@@ -251,8 +264,8 @@ Pre-build validation before writing production code. All critical items done.
 **Success criterion:** user views home photo library and streams a movie from mobile data.
 
 #### Remote Access (Windows)
-- [ ] tsnet integration — embed Tailscale node in Go binary
-- [ ] Zero-config remote access — no router port forwarding required
+- [x] tsnet integration — pulled forward to Phase 1 (see above)
+- [x] Zero-config remote access — pulled forward to Phase 1
 - [ ] QR code generation for iOS pairing
 - [ ] Auth token generation and management
 - [ ] HTTPS endpoint for iOS API
@@ -457,15 +470,20 @@ tailscale.com/tsnet               — Embedded Tailscale node for zero-config re
 
 ## 10. Next Steps — Phase 1
 
-Immediate priority is getting real thumbnails into the grid — that's the biggest UX gap right now.
+### 1. Thumbnail generation ✅ COMPLETE
 
-### 1. Thumbnail generation (libvips)
-- Add `github.com/davidbyttow/govips/v2` to `server\go.mod`
-- Generate thumb (200px), preview (800px) sizes on index
-- Store thumbnails in a `thumbnails\` cache directory alongside the server binary
-- Add `GET /api/thumbnail/:filename` endpoint serving the cached file
-- Add `GetThumbnail(filename string) string` to `app.go` (returns base64 or a data URL)
-- Replace the extension placeholder in `App.jsx` card with an `<img>` tag
+Implemented with FFmpeg (BtbN LGPL static build) instead of govips — simpler Windows dependency, no CGO, single exe handles JPEG/PNG/HEIC/MP4/MOV uniformly.
+
+- [x] `server/thumbnailer.go` — `Thumbnailer` struct, 4-worker semaphore pool, skip-if-cached
+- [x] `server/thumbnails/{id}.jpg` — cache keyed by DB id (avoids filename collisions)
+- [x] `GET /api/thumbnail/{id}` — serves cached JPEG, `Cache-Control: immutable`
+- [x] Thumbnails generated async after each DB insert — indexing never blocks on FFmpeg
+- [x] `<img src="http://127.0.0.1:4242/api/thumbnail/{id}">` in card grid, `onError` fallback
+- [x] Play icon overlay on video cards (MP4, MOV)
+- [x] HEIC fix — uses `-filter_complex "[0:v:0]scale=200:-1[out]"` (see Section 9 gotchas)
+- [ ] Preview size (800px) — deferred until lightbox/full-screen view is built
+
+**govips deferred to Phase 3** — migrate when library performance becomes a bottleneck at 100k+ photos.
 
 ### 2. File watcher (fsnotify)
 - Watch `C:\PhoneMedia` for new files
