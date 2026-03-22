@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 )
@@ -27,7 +29,7 @@ type job struct {
 	errMsg  string
 }
 
-func (j *job) start(folderPath string, db *sql.DB, thumb *Thumbnailer) {
+func (j *job) start(folderPath string, db *sql.DB, thumb *Thumbnailer, broker *Broker) {
 	j.mu.Lock()
 	j.status = "running"
 	j.indexed = 0
@@ -48,10 +50,11 @@ func (j *job) start(folderPath string, db *sql.DB, thumb *Thumbnailer) {
 			j.status = "done"
 		}
 		j.mu.Unlock()
+		broker.publish("index-done")
 	}()
 }
 
-func registerHandlers(mux *http.ServeMux, db *sql.DB, thumb *Thumbnailer) {
+func registerHandlers(mux *http.ServeMux, db *sql.DB, thumb *Thumbnailer, broker *Broker) {
 	j := &job{status: "idle"}
 
 	// GET /api/media?offset=0 — paginated media list (100 per page)
@@ -104,7 +107,7 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB, thumb *Thumbnailer) {
 			return
 		}
 
-		j.start(path, db, thumb)
+		j.start(path, db, thumb, broker)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"started"}`))
@@ -124,6 +127,35 @@ func registerHandlers(mux *http.ServeMux, db *sql.DB, thumb *Thumbnailer) {
 			"indexed": indexed,
 			"error":   errMsg,
 		})
+	})
+
+	// GET /api/events — SSE stream, pushes "new-file" and "index-done" events
+	mux.HandleFunc("GET /api/events", broker.ServeSSE)
+
+	// GET /api/stream/{id} — serve original file with range-request support (photos + videos)
+	mux.HandleFunc("GET /api/stream/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+		if err != nil {
+			http.Error(w, "invalid id", http.StatusBadRequest)
+			return
+		}
+		var filePath string
+		if err := db.QueryRow(`SELECT path FROM media WHERE id = ?`, id).Scan(&filePath); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		f, err := os.Open(filePath)
+		if err != nil {
+			http.Error(w, "file error", http.StatusInternalServerError)
+			return
+		}
+		defer f.Close()
+		fi, err := f.Stat()
+		if err != nil {
+			http.Error(w, "file error", http.StatusInternalServerError)
+			return
+		}
+		http.ServeContent(w, r, filepath.Base(filePath), fi.ModTime(), f)
 	})
 
 	// GET /api/thumbnail/{id} — serve cached thumbnail JPEG

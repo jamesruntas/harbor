@@ -18,8 +18,9 @@ const (
 	dbPath     = "../homestream.db"
 	// TODO: replace hardcoded paths with filepath.Join(filepath.Dir(os.Executable()), "tools", ...)
 	// once the installer bundles these binaries alongside server.exe.
-	ffmpegPath = `C:\Users\James\HarborTools\ffmpeg.exe`
-	thumbDir   = "thumbnails"
+	ffmpegPath  = `C:\Users\James\HarborTools\ffmpeg.exe`
+	thumbDir    = "thumbnails"
+	watchFolder = `C:\PhoneMedia`
 )
 
 // dedupLogger returns a Logf func that prints each unique message only once.
@@ -42,9 +43,14 @@ func dedupLogger() logger.Logf {
 func main() {
 	db := initDB(dbPath)
 	thumb := newThumbnailer(ffmpegPath, thumbDir)
+	broker := newBroker()
+
+	if err := startWatcher(watchFolder, db, thumb, broker); err != nil {
+		log.Printf("watcher disabled: %v", err)
+	}
 
 	mux := http.NewServeMux()
-	registerHandlers(mux, db, thumb)
+	registerHandlers(mux, db, thumb, broker)
 
 	// Local listener — used by the Wails UI
 	go func() {

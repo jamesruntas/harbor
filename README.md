@@ -1,9 +1,4 @@
 # README
-# HomeStream — Project Handoff Document
-
-**Date:** March 2026
-**Author:** James Runtas
-**Purpose:** Comprehensive context handoff for new Claude Code session
 
 ---
 
@@ -211,7 +206,8 @@ Pre-build validation before writing production code. All critical items done.
 - [x] FFmpeg thumbnail generation — 200px JPEG, 4-worker pool, skip-if-cached, async per file
 - [x] Thumbnail cache — `server/thumbnails/{id}.jpg`, keyed by DB id
 - [ ] Preview size thumbnail (800px) — deferred until lightbox view
-- [ ] File watcher (fsnotify) — auto-index on new files arriving in `C:\PhoneMedia`
+- [x] File watcher (fsnotify) — auto-index on new files arriving in `C:\PhoneMedia`
+- [x] SSE auto-refresh — EventSource in frontend, broker publishes `new-file` / `index-done`
 - [ ] FFmpeg video streaming endpoint
 - [ ] TMDB metadata scraper for movies and TV
 
