@@ -76,11 +76,12 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerHandlers(mux, exiftoolPath, gpthPath, cfg, db, thumb, movieThumb, broker)
+	handler := AuthMiddleware(cfg.get().APIToken, mux)
 
 	// Local listener — used by the Wails UI
 	go func() {
 		log.Printf("local server listening on %s", localAddr)
-		if err := http.ListenAndServe(localAddr, mux); err != nil {
+		if err := http.ListenAndServe(localAddr, handler); err != nil {
 			log.Fatalf("local server error: %v", err)
 		}
 	}()
@@ -107,5 +108,5 @@ func main() {
 	}
 	defer ln.Close()
 
-	log.Fatal(http.Serve(ln, mux))
+	log.Fatal(http.Serve(ln, handler))
 }

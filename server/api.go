@@ -3,11 +3,18 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+
+	exiftool "github.com/barasher/go-exiftool"
 )
 
 type MediaItem struct {
@@ -58,6 +65,37 @@ func (j *job) start(folderPath string, exiftoolPath string, db *sql.DB, thumb *T
 		j.mu.Unlock()
 		broker.publish("index-done")
 	}()
+}
+
+// AuthMiddleware skips auth for loopback (Wails UI) and enforces bearer token
+// for all other connections (tsnet / iOS app over Tailscale).
+func AuthMiddleware(token string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, _ := net.SplitHostPort(r.RemoteAddr)
+		if host == "127.0.0.1" || host == "::1" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if token != "" && r.Header.Get("Authorization") != "Bearer "+token {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// uniquePath returns a path that does not yet exist on disk.
+// If dir/filename is taken it tries dir/base_1.ext, dir/base_2.ext, …
+func uniquePath(dir, filename string) string {
+	ext  := filepath.Ext(filename)
+	base := strings.TrimSuffix(filename, ext)
+	dst  := filepath.Join(dir, filename)
+	for i := 1; ; i++ {
+		if _, err := os.Stat(dst); os.IsNotExist(err) {
+			return dst
+		}
+		dst = filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+	}
 }
 
 func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, cfg *settingsStore, db *sql.DB, thumb *Thumbnailer, movieThumb *Thumbnailer, broker *Broker) {
@@ -423,5 +461,67 @@ func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, 
 		tj.cancel()
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"cancelled"}`))
+	})
+
+	// ── iOS upload ────────────────────────────────────────────────────────────
+
+	// POST /api/upload — receive a single file from the iOS app.
+	// Multipart form field name: "file".  Max body: 500 MB.
+	// Returns: {"id": N, "filename": "...", "status": "ok"}
+	mux.HandleFunc("POST /api/upload", func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(500 << 20); err != nil {
+			http.Error(w, "cannot parse multipart: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		f, header, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "missing file field", http.StatusBadRequest)
+			return
+		}
+		defer f.Close()
+
+		if !supportedExts[strings.ToLower(filepath.Ext(header.Filename))] {
+			http.Error(w, "unsupported file type", http.StatusBadRequest)
+			return
+		}
+
+		mediaFolder := cfg.get().MediaFolder
+		if mediaFolder == "" {
+			http.Error(w, "media_folder not configured", http.StatusInternalServerError)
+			return
+		}
+
+		destPath := uniquePath(mediaFolder, header.Filename)
+		dst, err := os.Create(destPath)
+		if err != nil {
+			http.Error(w, "cannot save file: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err := io.Copy(dst, f); err != nil {
+			dst.Close()
+			os.Remove(destPath)
+			http.Error(w, "write error: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		dst.Close()
+
+		// Index the uploaded file immediately.
+		var newID int64
+		et, err := exiftool.NewExiftool(exiftool.SetExiftoolBinaryPath(exiftoolPath))
+		if err == nil {
+			indexFile(destPath, et, db, thumb)
+			et.Close()
+			db.QueryRow(`SELECT id FROM media WHERE path = ?`, destPath).Scan(&newID)
+			broker.publish("new-file")
+		} else {
+			log.Printf("upload: exiftool unavailable, file saved without metadata: %v", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":   "ok",
+			"id":       newID,
+			"filename": filepath.Base(destPath),
+		})
 	})
 }

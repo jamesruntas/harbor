@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"os"
@@ -13,6 +15,7 @@ type Settings struct {
 	MediaFolder  string `json:"media_folder"`
 	MoviesFolder string `json:"movies_folder"`
 	ToolsDir     string `json:"tools_dir"`
+	APIToken     string `json:"api_token"`
 }
 
 // settingsStore wraps Settings with a mutex for concurrent API access.
@@ -40,7 +43,15 @@ func newSettingsStore() *settingsStore {
 		if !os.IsNotExist(err) {
 			log.Printf("settings: read error: %v — using defaults", err)
 		}
-		return &settingsStore{data: defaults, path: p}
+		// First run — generate a token and persist defaults immediately.
+		b := make([]byte, 16)
+		if _, err2 := rand.Read(b); err2 == nil {
+			defaults.APIToken = hex.EncodeToString(b)
+		}
+		store := &settingsStore{data: defaults, path: p}
+		store.set(defaults)
+		log.Printf("settings: created %s with new API token", p)
+		return store
 	}
 
 	s := defaults
@@ -48,7 +59,17 @@ func newSettingsStore() *settingsStore {
 		log.Printf("settings: parse error: %v — using defaults", err)
 	}
 	log.Printf("settings: loaded from %s", p)
-	return &settingsStore{data: s, path: p}
+
+	store := &settingsStore{data: s, path: p}
+	if s.APIToken == "" {
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err == nil {
+			store.data.APIToken = hex.EncodeToString(b)
+			store.set(store.data) //nolint — best effort; log if it fails
+			log.Printf("settings: generated new API token")
+		}
+	}
+	return store
 }
 
 func (ss *settingsStore) get() Settings {

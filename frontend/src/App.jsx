@@ -84,6 +84,15 @@ function SettingsModal({ settings, onSave, onClose }) {
   const [toolsDir, setToolsDir]       = useState(settings.tools_dir || '')
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState(null)
+  const [copied, setCopied]           = useState(false)
+  const token = settings.api_token || ''
+
+  function copyToken() {
+    navigator.clipboard.writeText(token).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   async function pick(setter) {
     const p = await PickFolder()
@@ -99,6 +108,7 @@ function SettingsModal({ settings, onSave, onClose }) {
         media_folder: mediaFolder,
         movies_folder: moviesFolder,
         tools_dir: toolsDir,
+        api_token: token,
       }))
       const result = JSON.parse(raw)
       if (result.error) { setError(result.error); return }
@@ -141,6 +151,13 @@ function SettingsModal({ settings, onSave, onClose }) {
             <button className="setting-pick" onClick={() => pick(setToolsDir)}>Browse</button>
           </div>
           <p className="setting-hint">ExifTool and FFmpeg must be in this folder. Changes take effect on restart.</p>
+
+          <label className="setting-label" style={{ marginTop: 16 }}>Remote Access Token</label>
+          <div className="setting-row">
+            <input className="setting-input" value={token} readOnly style={{ fontFamily: 'monospace', fontSize: 12 }} />
+            <button className="setting-pick" onClick={copyToken}>{copied ? 'Copied!' : 'Copy'}</button>
+          </div>
+          <p className="setting-hint">Use this token to authenticate the iOS app over Tailscale.</p>
 
           {error && <p className="setting-error">{error}</p>}
         </div>
