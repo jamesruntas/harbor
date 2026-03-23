@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"tailscale.com/tsnet"
@@ -12,16 +14,29 @@ import (
 )
 
 const (
-	localAddr  = "127.0.0.1:4242"
-	tsHostname = "homestream"
-	tsnetDir   = "tsnet-state"
-	dbPath     = "../homestream.db"
-	// TODO: replace hardcoded paths with filepath.Join(filepath.Dir(os.Executable()), "tools", ...)
-	// once the installer bundles these binaries alongside server.exe.
-	ffmpegPath  = `C:\Users\James\HarborTools\ffmpeg.exe`
-	thumbDir    = "thumbnails"
-	watchFolder = `C:\PhoneMedia`
+	localAddr      = "127.0.0.1:4242"
+	tsHostname     = "harbor"
+	tsnetDir       = "tsnet-state"
+	dbPath         = "../harbor.db"
+	thumbDir       = "thumbnails"
+	movieThumbDir  = "movie-thumbnails"
 )
+
+// resolveToolPath returns the path to a tool binary.
+// Priority: settings.ToolsDir → HARBOR_TOOLS env var → tools/ next to executable.
+func resolveToolPath(name string, toolsDir string) string {
+	if toolsDir != "" {
+		return filepath.Join(toolsDir, name)
+	}
+	if dir := os.Getenv("HARBOR_TOOLS"); dir != "" {
+		return filepath.Join(dir, name)
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatalf("cannot resolve executable path: %v", err)
+	}
+	return filepath.Join(filepath.Dir(exe), "tools", name)
+}
 
 // dedupLogger returns a Logf func that prints each unique message only once.
 // Prevents tsnet from spamming the auth URL every 5 seconds.
@@ -41,16 +56,26 @@ func dedupLogger() logger.Logf {
 }
 
 func main() {
-	db := initDB(dbPath)
-	thumb := newThumbnailer(ffmpegPath, thumbDir)
-	broker := newBroker()
+	cfg := newSettingsStore()
+	s := cfg.get()
 
-	if err := startWatcher(watchFolder, db, thumb, broker); err != nil {
+	exiftoolPath := resolveToolPath("exiftool.exe", s.ToolsDir)
+	ffmpegPath   := resolveToolPath("ffmpeg.exe", s.ToolsDir)
+	gpthPath     := resolveToolPath("gpth.exe", s.ToolsDir)
+	log.Printf("tools: exiftool=%s  ffmpeg=%s  gpth=%s", exiftoolPath, ffmpegPath, gpthPath)
+	log.Printf("media folder: %s", s.MediaFolder)
+
+	db         := initDB(dbPath)
+	thumb      := newThumbnailer(ffmpegPath, thumbDir)
+	movieThumb := newThumbnailer(ffmpegPath, movieThumbDir)
+	broker     := newBroker()
+
+	if err := startWatcher(s.MediaFolder, exiftoolPath, db, thumb, broker); err != nil {
 		log.Printf("watcher disabled: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	registerHandlers(mux, db, thumb, broker)
+	registerHandlers(mux, exiftoolPath, gpthPath, cfg, db, thumb, movieThumb, broker)
 
 	// Local listener — used by the Wails UI
 	go func() {
@@ -68,9 +93,6 @@ func main() {
 	}
 	defer srv.Close()
 
-	// Block until authenticated and online. On first run, tsnet logs a single
-	// auth URL — visit it to add this device to your Tailscale network.
-	// Auth state is persisted in tsnet-state/ so subsequent runs skip this.
 	log.Print("tsnet: waiting for Tailscale auth...")
 	if _, err := srv.Up(context.Background()); err != nil {
 		log.Fatalf("tsnet auth failed: %v", err)

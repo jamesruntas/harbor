@@ -1,4 +1,4 @@
-# README
+# Harbor
 
 ---
 
@@ -19,12 +19,12 @@
 
 ## 1. Project Overview
 
-HomeStream is a **free, open-source alternative to Plex** — a single `.exe` installer that sets up a complete self-hosted media server on Windows with no Docker, no terminal, and no networking knowledge required.
+Harbor is a **free, open-source alternative to Plex** — a single `.exe` installer that sets up a complete self-hosted media server on Windows with no Docker, no terminal, and no networking knowledge required.
 
 ### One-Line Pitch
 > *"Keep Google Photos. Stop paying for it."*
 
-HomeStream is positioned as a **Google complement, not a replacement**. Users keep compressed copies on Google's free 15 GB tier for redundancy and store full-resolution originals on HomeStream. This removes the deletion anxiety problem entirely — no behaviour change required from the user.
+Harbor is positioned as a **Google complement, not a replacement**. Users keep compressed copies on Google's free 15 GB tier for redundancy and store full-resolution originals on Harbor. This removes the deletion anxiety problem entirely — no behaviour change required from the user.
 
 ### The Problem
 - Google Photos and iCloud charge recurring fees with storage limits
@@ -49,7 +49,7 @@ HomeStream is positioned as a **Google complement, not a replacement**. Users ke
 
 ## 2. Completed Personal Media Server
 
-James built and validated the full self-hosted stack firsthand on a Windows PC. This hands-on experience is the direct source of the product insight — the friction of this setup is what HomeStream eliminates.
+James built and validated the full self-hosted stack firsthand on a Windows PC. This hands-on experience is the direct source of the product insight — the friction of this setup is what Harbor eliminates.
 
 ### Hardware
 - **PC:** Daily-use Windows machine, 12-core CPU
@@ -73,11 +73,11 @@ James built and validated the full self-hosted stack firsthand on a Windows PC. 
 | WSL2 memory cap | `.wslconfig` — 6 GB cap | ✅ Live |
 
 ### Key Lessons Learned (Inform Product Design)
-- **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames. Colons are reserved on Windows. HomeStream must handle this at ingestion.
+- **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames. Colons are reserved on Windows. Harbor must handle this at ingestion.
 - **Robocopy /MIR vs /E** — /MIR mirrors deletions, defeating the purpose of backup. Always /E.
-- **Immich standalone Windows exe** — does not exist. Immich requires Docker. HomeStream's value prop is being the native Windows alternative.
+- **Immich standalone Windows exe** — does not exist. Immich requires Docker. Harbor's value prop is being the native Windows alternative.
 - **WSL2 memory** — Docker Desktop on Windows uses a WSL2 VM with no memory cap by default. Was consuming 16 GB uncapped.
-- **Incomplete transfers** — iOS can transfer incomplete files if the photo is still processing after capture. HomeStream must handle partial files gracefully.
+- **Incomplete transfers** — iOS can transfer incomplete files if the photo is still processing after capture. Harbor must handle partial files gracefully.
 
 ---
 
@@ -143,7 +143,7 @@ Immich (AGPL) and Jellyfin (GPL) are deliberately **not bundled** — native rep
 ## 5. Key Product Decisions
 
 ### Backup Strategy
-Decided this session. Default recommendation is both:
+Default recommendation is both:
 
 1. **External drive** — app detects plugged-in drives, one-click backup setup, confidence dashboard showing "X copies · last backed up Y hours ago"
 2. **Storage Saver** — keep compressed copies on Google's free 15 GB as offsite redundancy, framed as parallel safety net not migration
@@ -165,7 +165,7 @@ Decided this session. Default recommendation is both:
 - No Storage Saver equivalent — only 5 GB free, no compressed tier
 - iCloud importer is a more differentiated feature but harder to build — Phase 3
 
-### HomeStream Positioning
+### Harbor Positioning
 Positioned as **Google complement** (Storage Saver angle) for onboarding. The user never has to answer "what if my PC dies" — Google is still there. Augmentation, not replacement.
 
 ---
@@ -179,7 +179,7 @@ Pre-build validation before writing production code. All critical items done.
 **Homelab tasks**
 - [x] Go + Wails hello-world — window opens, React renders, hot reload works
 - [x] ExifTool → SQLite core loop — indexing `C:\PhoneMedia`, DB rows confirmed
-- [x] tsnet proof of concept — server authenticates to Tailscale, reachable at `http://homestream/` with no router config
+- [x] tsnet proof of concept — server authenticates to Tailscale, reachable at `http://harbor/` with no router config
 - [ ] Tailscale direct connection — fix relay via UDP port 41641 *(non-blocking, deferred)*
 
 **Architecture decisions made this phase**
@@ -205,19 +205,23 @@ Pre-build validation before writing production code. All critical items done.
 - [x] Video date fix — falls back to `CreateDate` when `DateTimeOriginal` absent (MP4/MOV)
 - [x] FFmpeg thumbnail generation — 200px JPEG, 4-worker pool, skip-if-cached, async per file
 - [x] Thumbnail cache — `server/thumbnails/{id}.jpg`, keyed by DB id
-- [ ] Preview size thumbnail (800px) — deferred until lightbox view
-- [x] File watcher (fsnotify) — auto-index on new files arriving in `C:\PhoneMedia`
+- [x] File watcher (fsnotify) — auto-index on new files arriving in the configured media folder
 - [x] SSE auto-refresh — EventSource in frontend, broker publishes `new-file` / `index-done`
-- [ ] FFmpeg video streaming endpoint
+- [x] Configurable tool paths — `HARBOR_TOOLS` env var or `settings.json`, no more hardcoded user paths
+- [ ] Preview size thumbnail (800px) — deferred until lightbox view
+- [x] FFmpeg video streaming — `GET /api/stream/{id}` and `GET /api/movies/stream/{id}`, range-request support for seeking
+- [ ] Movie thumbnail reliability — FFmpeg first-frame generation works for MP4/MOV but is hit-and-miss on MKV and other containers; needs investigation and fallback handling *(known issue)*
 - [ ] TMDB metadata scraper for movies and TV
 
 #### Google Takeout Importer
-- [ ] ZIP extraction and folder traversal
-- [ ] JSON sidecar reconciliation (GPTH-equivalent logic)
-- [ ] Date/GPS restoration from JSON to media files
-- [ ] Duplicate detection and flagging
-- [ ] Preview UI before import — shows counts, flags conflicts, never auto-deletes
-- [ ] In-app guided Takeout request walkthrough
+- [x] ZIP extraction — extracts all ZIPs in a selected folder into a temp workspace
+- [x] GPTH integration — runs `gpth.exe --albums nothing` to reconcile JSON sidecars and restore EXIF dates/GPS
+- [x] Duplicate detection — filename + DB lookup; flags files already in the library *(TODO: content-hash for higher accuracy)*
+- [x] Preview before import — shows new count vs duplicate count, user confirms or cancels
+- [x] Non-destructive — originals never modified; new files copied flat into `media_folder`, temp workspace cleaned up
+- [x] Indexed automatically after copy — ExifTool runs on imported files, thumbnails generated
+- [x] SSE refresh — grid updates automatically when import completes
+- [ ] In-app guided Takeout request walkthrough (link to takeout.google.com with instructions)
 
 #### Backup Story
 - [ ] External drive detection on startup
@@ -230,25 +234,27 @@ Pre-build validation before writing production code. All critical items done.
 #### Dashboard UI (Wails + React)
 - [x] Photo grid with real thumbnails (FFmpeg-generated JPEG)
 - [x] Video cards — play icon overlay, first-frame thumbnail
+- [x] Lightbox view — click to open full-size photo or video, keyboard navigation (←/→/Esc)
 - [x] Paginated media list (100 per page, "Load more N remaining")
 - [x] Index button with live file counter ("Indexing… 42 files")
+- [x] Index button uses `media_folder` from settings — no hardcoded path
 - [x] Error state clears automatically on server recovery
 - [x] Color palette — `#222222 / #1c5d99 / #bbcde5 / #fbfaef / #23967f`
-- [ ] Date-based browsing (year/month grouping)
+- [x] Date-based browsing — year/month sidebar, click to filter grid
+- [x] Settings panel — media folder + tools directory, native OS folder picker
 - [ ] Basic search (filename, date range)
-- [ ] Movie and TV library view
-- [ ] Settings panel (configurable media folder, tool paths)
+- [x] Movies & TV tab — separate from Phone Media, folder configured via Settings, scan + stream + lightbox player
 - [ ] Backup status widget
 
 #### Installer
 - [ ] Inno Setup installer
-- [ ] ExifTool bundled in `tools\` alongside server.exe (replace hardcoded path)
-- [ ] FFmpeg bundled in `tools\` alongside server.exe (replace hardcoded path)
+- [ ] ExifTool bundled in `tools\` alongside server.exe
+- [ ] FFmpeg bundled in `tools\` alongside server.exe
 - [ ] First-run onboarding wizard
 
 #### Remote Access *(pulled forward from Phase 2)*
 - [x] tsnet integration — embedded Tailscale node in server binary
-- [x] Zero-config remote access — reachable at `http://homestream/` with no router config
+- [x] Zero-config remote access — reachable at `http://harbor/` with no router config
 - [x] Auth state persisted in `server\tsnet-state\` — no re-auth on restart
 - [ ] QR code generation for iOS pairing
 - [ ] Auth token / API key for iOS requests
@@ -278,7 +284,7 @@ Pre-build validation before writing production code. All critical items done.
 
 #### Google Positioning
 - [ ] Storage Saver onboarding flow
-- [ ] Side-by-side mode (HomeStream + Google running in parallel)
+- [ ] Side-by-side mode (Harbor + Google running in parallel)
 - [ ] "Keep Google, stop paying" framing in UI copy
 - [ ] No deletion pressure in any UI surface
 
@@ -320,27 +326,35 @@ Pre-build validation before writing production code. All critical items done.
 
 ### Binary Architecture
 
-HomeStream runs as **two separate binaries** that must both be running. The Wails UI auto-launches the server on startup and kills it on close.
+Harbor runs as **two separate binaries** that must both be running. The Wails UI auto-launches the server on startup and kills it on close.
 
 ```
 harbor\                          ← Wails UI binary (Go 1.23)
 ├── main.go                      ← Wails bootstrap, registers OnStartup/OnShutdown
 ├── app.go                       ← App struct: finds + spawns server, HTTP proxy methods
 ├── wails.json
-├── homestream.db                ← SQLite DB (written by server, read via server API)
+├── harbor.db                    ← SQLite DB (written by server, read via server API)
 ├── frontend\
 │   ├── src\
-│   │   ├── App.jsx              ← Photo grid, index button, load more, polling
+│   │   ├── App.jsx              ← Photo grid, sidebar, lightbox, settings modal
 │   │   └── style.css
 │   └── wailsjs\go\main\
-│       ├── App.js               ← Wails JS bindings (hand-maintained until wails generate module)
+│       ├── App.js               ← Wails JS bindings (hand-maintained)
 │       └── App.d.ts
 └── server\                      ← Go server binary (Go 1.26.1)
     ├── main.go                  ← Starts local :4242 listener + tsnet remote listener
-    ├── db.go                    ← SQLite init (CREATE TABLE IF NOT EXISTS media)
+    ├── db.go                    ← SQLite init (media + movies tables)
+    ├── settings.go              ← Settings struct, load/save settings.json
     ├── indexer.go               ← ExifTool integration, filepath.Walk, DB inserts
-    ├── api.go                   ← HTTP handlers + job state for async indexing
+    ├── movies.go                ← Movie filesystem scanner (no ExifTool)
+    ├── takeout.go               ← Google Takeout import: extract ZIPs → GPTH → preview → copy → index
+    ├── thumbnailer.go           ← FFmpeg thumbnail generation, 4-worker pool, cache
+    ├── watcher.go               ← fsnotify file watcher, 2-second debounce per file
+    ├── broker.go                ← SSE pub/sub broker (new-file, index-done, movies-done events)
+    ├── api.go                   ← HTTP handlers + job state for indexing, movies, takeout
     ├── go.mod                   ← Separate module: harbor/server (Go 1.26.1 + tsnet)
+    ├── thumbnails\              ← Cached media thumbnail JPEGs keyed by DB id
+    ├── movie-thumbnails\        ← Cached movie thumbnail JPEGs (separate to avoid ID collisions)
     └── tsnet-state\             ← Tailscale auth state (persisted across runs)
         └── tailscaled.state
 ```
@@ -355,27 +369,74 @@ Wails UI (harbor.exe)
     │
     ↓ HTTP on 127.0.0.1:4242
 server.exe
-    ├── GET  /api/media?offset=N    → paginated JSON list of indexed media
-    ├── POST /api/index (path=...)  → starts background indexing job, returns immediately
-    └── GET  /api/index/status      → job progress: {status, indexed, error}
+    ├── GET  /api/media?year=N&month=N&offset=N  → paginated JSON, filtered by date
+    ├── GET  /api/months                          → [{year, month, count}] for sidebar
+    ├── POST /api/index (path=...)                → starts background indexing job
+    ├── GET  /api/index/status                    → {status, indexed, error}
+    ├── GET  /api/events                          → SSE stream (new-file, index-done)
+    ├── GET  /api/stream/{id}                     → original file, range-request support
+    ├── GET  /api/thumbnail/{id}                  → 200px JPEG, Cache-Control immutable
+    ├── GET  /api/movies                          → paginated movie list
+    ├── POST /api/movies/index                    → scan movies_folder, background job
+    ├── GET  /api/movies/index/status             → {status, indexed, error}
+    ├── GET  /api/movies/stream/{id}              → original movie file, range-request support
+    └── GET  /api/movies/thumbnail/{id}           → 200px first-frame JPEG (hit-and-miss on some containers)
+    ├── GET  /api/settings                        → current settings JSON
+    ├── POST /api/settings                        → update and persist settings
+    ├── POST /api/takeout/start                   → begin Takeout import (folder of ZIPs)
+    ├── GET  /api/takeout/status                  → {phase, progress, new_count, dup_count, error}
+    ├── POST /api/takeout/confirm                 → approve preview, begin file copy
+    └── POST /api/takeout/cancel                  → cancel at preview, clean up temp files
     │
     │  also listens via tsnet on port 80
     │
     ↓ Tailscale network (no router config)
-http://homestream/                  → same API endpoints, accessible remotely
+http://harbor/                      → same API endpoints, accessible remotely
 ```
 
 ### Wails binding methods (app.go)
 
-| Method | Frontend call | What it does |
-|---|---|---|
-| `GetMedia(offset int) string` | `GetMedia(0)` | Proxies `GET /api/media?offset=N`, returns JSON |
-| `IndexFolder(path string) string` | `IndexFolder("C:\\PhoneMedia")` | Proxies `POST /api/index`, returns `{"status":"started"}` immediately |
-| `GetIndexStatus() string` | `GetIndexStatus()` | Proxies `GET /api/index/status`, returns `{status, indexed, error}` |
+| Method | What it does |
+|---|---|
+| `GetMedia(year, month, offset int)` | Proxies `GET /api/media`, returns JSON page |
+| `GetMonths()` | Proxies `GET /api/months`, returns [{year,month,count}] |
+| `IndexFolder(path string)` | Proxies `POST /api/index`, returns immediately |
+| `GetIndexStatus()` | Proxies `GET /api/index/status` |
+| `GetSettings()` | Proxies `GET /api/settings` |
+| `SaveSettings(json string)` | Proxies `POST /api/settings` |
+| `PickFolder()` | Opens native OS folder picker dialog |
+| `GetMovies(offset int)` | Proxies `GET /api/movies` |
+| `IndexMovies()` | Proxies `POST /api/movies/index` |
+| `GetMoviesStatus()` | Proxies `GET /api/movies/index/status` |
+| `StartTakeout(folder string)` | Proxies `POST /api/takeout/start` |
+| `GetTakeoutStatus()` | Proxies `GET /api/takeout/status` |
+| `ConfirmTakeout()` | Proxies `POST /api/takeout/confirm` |
+| `CancelTakeout()` | Proxies `POST /api/takeout/cancel` |
+
+### Settings (settings.json next to server.exe)
+
+```json
+{
+  "media_folder": "C:\\PhoneMedia",
+  "movies_folder": "F:\\Movies & TV",
+  "tools_dir": ""
+}
+```
+
+`tools_dir` empty → falls back to `HARBOR_TOOLS` env var → then `tools\` next to server.exe.
+Changes to `tools_dir` take effect on server restart. Changes to `media_folder` and `movies_folder` take effect on the next scan.
 
 ### SQLite schema
 
 ```sql
+CREATE TABLE IF NOT EXISTS movies (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    path        TEXT UNIQUE,
+    filename    TEXT,
+    size        INTEGER,
+    modified_at TEXT
+)
+
 CREATE TABLE IF NOT EXISTS media (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     path       TEXT UNIQUE,
@@ -391,17 +452,21 @@ CREATE TABLE IF NOT EXISTS media (
 ### Dev workflow
 
 ```powershell
-# Terminal 1 — build and start the server (required before wails dev)
+# Set tool paths for dev (skip if tools\ exists next to server.exe)
+$env:HARBOR_TOOLS = "C:\Users\James\HarborTools"
+
+# Terminal 1 — build and start the server
 cd server
 go build -o server.exe .
+.\server.exe
 
-# Terminal 2 — run the Wails UI (auto-finds and launches server.exe)
+# Terminal 2 — run the Wails UI (hot-reloads React on save)
 cd ..
 wails dev
 ```
 
-The UI retries the server connection for up to 8 seconds on startup to give tsnet time to authenticate.
-On subsequent runs tsnet auth is instant (state persisted in `server\tsnet-state\`).
+After changing server code: stop `wails dev`, rebuild `server.exe`, restart `wails dev`.
+After changing `app.go` or `main.go`: `wails dev` recompiles Go automatically.
 
 ---
 
@@ -415,16 +480,18 @@ On subsequent runs tsnet auth is instant (state persisted in `server\tsnet-state
 | Go (server) | **1.26.1** — tsnet requires ≥ 1.26 |
 | Wails | v2.11.0 |
 | Node | 22.x |
-| ExifTool | 13.53 — hardcoded to `C:\Users\James\HarborTools\exiftool.exe` in `server\indexer.go` |
+| ExifTool | 13.53 — path resolved via `HARBOR_TOOLS` env or `settings.json` |
+| FFmpeg | BtbN LGPL static build — path resolved via `HARBOR_TOOLS` env or `settings.json` |
+| GPTH | Latest release — `gpth.exe` in `HarborTools\`, used for Google Takeout import |
 | TDM-GCC | Latest — required for go-sqlite3 CGO compilation |
-| DB Browser for SQLite | Latest — inspect `homestream.db` |
+| DB Browser for SQLite | Latest — inspect `harbor.db` |
 | Project path | `C:\Users\James\harbor` |
-| DB path | `C:\Users\James\harbor\homestream.db` |
+| DB path | `C:\Users\James\harbor\harbor.db` |
 | Media folder | `C:\PhoneMedia` (iPhone photos synced via Syncthing) |
 | Movies folder | `F:\Movies & TV` |
 | Tailscale PC IP | `100.92.73.84` |
 | Tailscale iPhone IP | `100.75.158.126` |
-| tsnet hostname | `homestream` (reachable at `http://homestream/` on Tailscale) |
+| tsnet hostname | `harbor` (reachable at `http://harbor/` on Tailscale) |
 
 ### Go Module Dependencies
 
@@ -436,6 +503,7 @@ github.com/wailsapp/wails/v2   — Desktop app framework
 **harbor/server/**
 ```
 github.com/barasher/go-exiftool   — ExifTool process management
+github.com/fsnotify/fsnotify      — File system watcher
 github.com/mattn/go-sqlite3       — SQLite driver (requires CGO / TDM-GCC)
 tailscale.com/tsnet               — Embedded Tailscale node for zero-config remote access
 ```
@@ -448,54 +516,44 @@ tailscale.com/tsnet               — Embedded Tailscale node for zero-config re
 
 - **go-sqlite3 requires CGO** — TDM-GCC must be installed and on `PATH` before `go get github.com/mattn/go-sqlite3`. Both binaries use SQLite, both need TDM-GCC at compile time.
 
-- **ExifTool hardcoded path** — `server\indexer.go` has `C:\Users\James\HarborTools\exiftool.exe` hardcoded. TODO: replace with `filepath.Join(filepath.Dir(os.Executable()), "tools", "exiftool.exe")` once the installer bundles ExifTool.
+- **Tool path resolution order** — `settings.json` → `HARBOR_TOOLS` env var → `tools\` next to `server.exe`. In dev, set `$env:HARBOR_TOOLS = "C:\Users\James\HarborTools"`. In production, the installer places tools in `tools\`.
 
 - **Server binary must be built before `wails dev`** — the Wails UI finds `server\server.exe` relative to the working directory. Run `cd server && go build -o server.exe .` first.
 
-- **Wails bindings are hand-maintained** — `frontend\wailsjs\go\main\App.js` and `App.d.ts` are auto-generated by `wails generate module` but are currently hand-edited. Run `wails generate module` after adding new bound methods to regenerate them properly.
+- **Wails bindings are hand-maintained** — `frontend\wailsjs\go\main\App.js` and `App.d.ts` are currently hand-edited. Run `wails generate module` after adding new bound methods to regenerate them properly.
 
 - **tsnet-state path is relative** — `server\main.go` uses `tsnet-state` as a relative directory. The server sets `cmd.Dir` to the binary's own directory at launch, so this resolves correctly. Do not move the server binary without also moving `tsnet-state\`.
 
+- **Tailscale hostname changed** — tsnet hostname is now `harbor` (was `homestream`). If you have an existing tsnet-state from before this rename, delete `server\tsnet-state\` and re-authenticate to pick up the new hostname.
+
+- **DB renamed** — database is now `harbor.db` (was `homestream.db`). Rename the existing file or re-index.
+
 - **FFmpeg HEIC thumbnailing** — `-vf "scale=200:-1"` fails on HEIC due to multiple embedded image streams. Use `-filter_complex "[0:v:0]scale=200:-1[out]" -map "[out]"` instead. This selects the first video stream explicitly and works universally across JPEG, PNG, HEIC, MP4, and MOV.
 
-- **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames, which are reserved on Windows. HomeStream must sanitise filenames at ingestion (not yet implemented).
+- **GPTH must be in tools directory** — `gpth.exe` is a required dependency for Google Takeout import. Download from the [GPTH releases page](https://github.com/TheLastGimbus/GooglePhotosTakeoutHelper/releases) and place alongside `exiftool.exe` and `ffmpeg.exe`. The server checks for its existence before starting an import and returns a clear error if missing.
 
-- **Incomplete transfers** — iOS can transfer incomplete files if a photo is still processing after capture. HomeStream must handle partial files gracefully (not yet implemented).
+- **Takeout duplicate detection is filename-based** *(known limitation)* — duplicates are identified by filename match against existing DB rows and the media folder on disk. This can miss duplicates with different filenames (e.g. Google renaming during export) and falsely flag unrelated files with the same name. A content-hash approach (xxHash of first 64 KB) would be more accurate — deferred.
+
+- **Movie thumbnail reliability** *(known issue)* — FFmpeg first-frame extraction is reliable for MP4 and MOV but fails silently on some MKV files and other containers. Likely causes: codec not in FFmpeg LGPL build, no keyframe at position 0, or container-specific seeking issues. Fix needed: probe with `-ss 00:00:05` offset, retry on failure, and verify the FFmpeg build includes the required decoders.
+
+- **File watcher is non-recursive** — `server\watcher.go` watches the top-level media folder only. Subdirectories added after startup are not watched. Phase 1 assumption: `C:\PhoneMedia` is flat (Syncthing default layout).
+
+- **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames, which are reserved on Windows. Harbor must sanitise filenames at ingestion (not yet implemented).
+
+- **Incomplete transfers** — iOS can transfer incomplete files if a photo is still processing after capture. Harbor must handle partial files gracefully (not yet implemented).
 
 ---
 
 ## 10. Next Steps — Phase 1
 
-### 1. Thumbnail generation ✅ COMPLETE
+### Remaining items (priority order)
 
-Implemented with FFmpeg (BtbN LGPL static build) instead of govips — simpler Windows dependency, no CGO, single exe handles JPEG/PNG/HEIC/MP4/MOV uniformly.
+1. **FFmpeg video streaming** — `GET /api/stream/{id}` already serves original files with range-request support. Frontend lightbox uses `<video>` for `.mp4`/`.mov`. Clicking a video card plays it inline in the lightbox. ✅ Done via the stream endpoint.
 
-- [x] `server/thumbnailer.go` — `Thumbnailer` struct, 4-worker semaphore pool, skip-if-cached
-- [x] `server/thumbnails/{id}.jpg` — cache keyed by DB id (avoids filename collisions)
-- [x] `GET /api/thumbnail/{id}` — serves cached JPEG, `Cache-Control: immutable`
-- [x] Thumbnails generated async after each DB insert — indexing never blocks on FFmpeg
-- [x] `<img src="http://127.0.0.1:4242/api/thumbnail/{id}">` in card grid, `onError` fallback
-- [x] Play icon overlay on video cards (MP4, MOV)
-- [x] HEIC fix — uses `-filter_complex "[0:v:0]scale=200:-1[out]"` (see Section 9 gotchas)
-- [ ] Preview size (800px) — deferred until lightbox/full-screen view is built
+2. **Basic search** — filename substring filter + date range picker in the header. Server-side `LIKE` query on filename and `BETWEEN` on date_taken.
 
-**govips deferred to Phase 3** — migrate when library performance becomes a bottleneck at 100k+ photos.
+3. **Google Takeout importer** — ZIP extraction, JSON sidecar reconciliation, preview before import.
 
-### 2. File watcher (fsnotify)
-- Watch `C:\PhoneMedia` for new files
-- Auto-index and thumbnail on arrival — no manual button needed
-- This is the core UX promise: phone syncs via Syncthing, HomeStream picks it up automatically
+4. **Backup story** — external drive detection, one-click setup, confidence dashboard.
 
-### 3. ExifTool path — replace hardcode
-- Use `filepath.Join(filepath.Dir(os.Executable()), "tools", "exiftool.exe")` in `server\indexer.go`
-- Bundle `exiftool.exe` in `server\tools\` for dev, and in the installer output for prod
-
-### 4. Date-based browsing
-- Group the photo grid by year/month
-- Add a sidebar or tab strip for navigation
-
-### 5. Settings panel
-- Configurable media folder path (instead of hardcoded `C:\PhoneMedia`)
-- Configurable ExifTool path (instead of hardcoded — interim fix before installer)
-
----
+5. **Installer** — Inno Setup, bundle ExifTool + FFmpeg in `tools\`, first-run onboarding wizard.

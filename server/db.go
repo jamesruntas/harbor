@@ -26,5 +26,12 @@ func initDB(path string) *sql.DB {
 		make       TEXT,
 		model      TEXT
 	)`)
+	db.Exec(`CREATE TABLE IF NOT EXISTS movies (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		path        TEXT UNIQUE,
+		filename    TEXT,
+		size        INTEGER,
+		modified_at TEXT
+	)`)
 	return db
 }

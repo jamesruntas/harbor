@@ -20,8 +20,8 @@ import (
 //
 // Note: non-recursive — subdirectories added after startup are not watched.
 // Phase 1 assumption: C:\PhoneMedia is flat (Syncthing default layout).
-func startWatcher(folderPath string, db *sql.DB, thumb *Thumbnailer, broker *Broker) error {
-	et, err := exiftool.NewExiftool(exiftool.SetExiftoolBinaryPath(`C:\Users\James\HarborTools\exiftool.exe`))
+func startWatcher(folderPath string, exiftoolPath string, db *sql.DB, thumb *Thumbnailer, broker *Broker) error {
+	et, err := exiftool.NewExiftool(exiftool.SetExiftoolBinaryPath(exiftoolPath))
 	if err != nil {
 		return fmt.Errorf("watcher: exiftool init failed: %w", err)
 	}

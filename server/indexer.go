@@ -85,10 +85,8 @@ func indexFile(path string, et *exiftool.Exiftool, db *sql.DB, thumb *Thumbnaile
 	return true
 }
 
-func indexFolder(folderPath string, db *sql.DB, thumb *Thumbnailer, onFile func()) error {
-	// TODO: replace hardcoded path with runtime-relative path once installer is built
-	// final form: filepath.Join(filepath.Dir(os.Executable()), "tools", "exiftool.exe")
-	et, err := exiftool.NewExiftool(exiftool.SetExiftoolBinaryPath(`C:\Users\James\HarborTools\exiftool.exe`))
+func indexFolder(folderPath string, exiftoolPath string, db *sql.DB, thumb *Thumbnailer, onFile func()) error {
+	et, err := exiftool.NewExiftool(exiftool.SetExiftoolBinaryPath(exiftoolPath))
 	if err != nil {
 		return fmt.Errorf("exiftool init failed: %w", err)
 	}
