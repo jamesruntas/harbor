@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Pin tool versions here — bump when new releases are available.
+env:
+  EXIFTOOL_VERSION: "13.25"
+  FFMPEG_VERSION:   "7.1"       # BtbN LGPL essentials build tag
+  GPTH_VERSION:     "4.0.0"     # TheLastGimbus/GooglePhotosTakeoutHelper
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write   # needed to create the GitHub Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Go (two versions: Wails app needs 1.23, server needs 1.26) ──────────
+      # Install the newer version last so `go` on PATH is 1.26 for the server.
+      # Wails CLI uses its own embedded toolchain.
+
+      - name: Set up Go 1.23 (Wails)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: false
+
+      - name: Set up Go 1.26 (server)
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.1'
+          cache: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── Wails CLI ─────────────────────────────────────────────────────────────
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      # ── Build server.exe ─────────────────────────────────────────────────────
+      - name: Build server.exe
+        working-directory: server
+        run: go build -ldflags="-s -w" -o server.exe .
+
+      # ── Download bundled tools ────────────────────────────────────────────────
+      - name: Download tools
+        shell: pwsh
+        run: |
+          $toolsDir = "build\windows\installer\tools"
+          New-Item -ItemType Directory -Force -Path $toolsDir | Out-Null
+
+          # ExifTool — standalone Windows executable
+          $ver = $env:EXIFTOOL_VERSION
+          $url = "https://exiftool.org/exiftool-${ver}_64.zip"
+          Write-Host "Downloading ExifTool $ver from $url"
+          Invoke-WebRequest -Uri $url -OutFile "exiftool.zip"
+          Expand-Archive -Path "exiftool.zip" -DestinationPath "exiftool_tmp" -Force
+          # ExifTool zip contains "exiftool(-k).exe" — rename to exiftool.exe
+          Get-ChildItem "exiftool_tmp" -Filter "*.exe" | Select-Object -First 1 |
+            Copy-Item -Destination "$toolsDir\exiftool.exe"
+
+          # FFmpeg — BtbN LGPL essentials build (Windows 64-bit)
+          $ffver = $env:FFMPEG_VERSION
+          $ffurl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-${ffver}-essentials/ffmpeg-n${ffver}-latest-win64-lgpl-essentials.zip"
+          Write-Host "Downloading FFmpeg $ffver from $ffurl"
+          Invoke-WebRequest -Uri $ffurl -OutFile "ffmpeg.zip"
+          Expand-Archive -Path "ffmpeg.zip" -DestinationPath "ffmpeg_tmp" -Force
+          Get-ChildItem "ffmpeg_tmp" -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1 |
+            Copy-Item -Destination "$toolsDir\ffmpeg.exe"
+
+          # GPTH (Google Photos Takeout Helper)
+          $gpthVer = $env:GPTH_VERSION
+          $gpthUrl = "https://github.com/TheLastGimbus/GooglePhotosTakeoutHelper/releases/download/v${gpthVer}/gpth-Windows.exe"
+          Write-Host "Downloading GPTH $gpthVer from $gpthUrl"
+          Invoke-WebRequest -Uri $gpthUrl -OutFile "$toolsDir\gpth.exe"
+
+          Write-Host "Tools downloaded:"
+          Get-ChildItem $toolsDir | Format-Table Name, Length
+
+      # ── Build harbor.exe + installer via Wails ────────────────────────────────
+      # -nsis flag: builds harbor.exe, fills wails_tools.nsh, downloads WebView2
+      # bootstrapper, and runs makensis on build\windows\installer\project.nsi.
+      # Our modified project.nsi adds server.exe and tools\ to the installer.
+      - name: Build installer (wails build -nsis)
+        run: wails build -platform windows/amd64 -nsis
+
+      # ── Rename output to include version tag ──────────────────────────────────
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $src = "build\bin\harbor-amd64-installer.exe"
+          $dst = "build\bin\HarborSetup-${tag}.exe"
+          Move-Item $src $dst
+          Write-Host "Installer: $dst"
+
+      # ── Create GitHub Release ─────────────────────────────────────────────────
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/bin/HarborSetup-*.exe
+          generate_release_notes: true
+          fail_on_unmatched_files: true

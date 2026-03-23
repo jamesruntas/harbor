@@ -5,4 +5,6 @@ server/thumbnails
 server/movie-thumbnails
 server/server.exe
 server/tools/
+build/windows/installer/tools/
+build/windows/installer/tmp/
 *.db

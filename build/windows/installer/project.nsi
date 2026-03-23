@@ -88,6 +88,17 @@ Section
 
     !insertmacro wails.files
 
+    ; Harbor backend server
+    ; Path is relative to build\windows\installer\ (where makensis runs)
+    File "..\..\..\server\server.exe"
+
+    ; Bundled tools — downloaded by CI into build\windows\installer\tools\
+    SetOutPath "$INSTDIR\tools"
+    File "tools\exiftool.exe"
+    File "tools\ffmpeg.exe"
+    File "tools\gpth.exe"
+    SetOutPath $INSTDIR
+
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
     CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
 

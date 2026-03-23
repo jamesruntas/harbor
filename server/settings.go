@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"path/filepath"
 	"sync"
 )
 
@@ -26,11 +25,7 @@ type settingsStore struct {
 }
 
 func newSettingsStore() *settingsStore {
-	exe, err := os.Executable()
-	if err != nil {
-		log.Fatalf("settings: cannot resolve executable path: %v", err)
-	}
-	p := filepath.Join(filepath.Dir(exe), "settings.json")
+	p := appDataDir() + string(os.PathSeparator) + "settings.json"
 
 	defaults := Settings{
 		MediaFolder:  `C:\PhoneMedia`,

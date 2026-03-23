@@ -14,12 +14,8 @@ import (
 )
 
 const (
-	localAddr      = "127.0.0.1:4242"
-	tsHostname     = "harbor"
-	tsnetDir       = "tsnet-state"
-	dbPath         = "../harbor.db"
-	thumbDir       = "thumbnails"
-	movieThumbDir  = "movie-thumbnails"
+	localAddr  = "127.0.0.1:4242"
+	tsHostname = "harbor"
 )
 
 // resolveToolPath returns the path to a tool binary.
@@ -56,6 +52,9 @@ func dedupLogger() logger.Logf {
 }
 
 func main() {
+	dataDir := appDataDir()
+	log.Printf("data directory: %s", dataDir)
+
 	cfg := newSettingsStore()
 	s := cfg.get()
 
@@ -64,6 +63,11 @@ func main() {
 	gpthPath     := resolveToolPath("gpth.exe", s.ToolsDir)
 	log.Printf("tools: exiftool=%s  ffmpeg=%s  gpth=%s", exiftoolPath, ffmpegPath, gpthPath)
 	log.Printf("media folder: %s", s.MediaFolder)
+
+	dbPath        := filepath.Join(dataDir, "harbor.db")
+	thumbDir      := filepath.Join(dataDir, "thumbnails")
+	movieThumbDir := filepath.Join(dataDir, "movie-thumbnails")
+	tsnetDir      := filepath.Join(dataDir, "tsnet-state")
 
 	db         := initDB(dbPath)
 	thumb      := newThumbnailer(ffmpegPath, thumbDir)
@@ -89,7 +93,7 @@ func main() {
 	// tsnet listener — remote access via Tailscale (no router config needed)
 	srv := &tsnet.Server{
 		Hostname: tsHostname,
-		Dir:      tsnetDir,
+		Dir:      tsnetDir, // %AppData%\Harbor\tsnet-state
 		Logf:     dedupLogger(),
 	}
 	defer srv.Close()
