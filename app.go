@@ -235,6 +235,39 @@ func (a *App) GetIndexStatus() string {
 	return string(body)
 }
 
+// GetBackupDrives returns the list of drive roots as a JSON array.
+func (a *App) GetBackupDrives() string {
+	resp, err := http.Get(serverBase + "/api/backup/drives")
+	if err != nil {
+		return "[]"
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
+// GetBackupStatus returns the current backup job state as a JSON string.
+func (a *App) GetBackupStatus() string {
+	resp, err := http.Get(serverBase + "/api/backup/status")
+	if err != nil {
+		return `{"status":"error","error":"server unreachable"}`
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
+// StartBackup triggers a Robocopy backup from media_folder to backup_dest.
+func (a *App) StartBackup() string {
+	resp, err := http.Post(serverBase+"/api/backup/start", "", nil)
+	if err != nil {
+		return fmt.Sprintf(`{"error":"%v"}`, err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return string(b)
+}
+
 // jsonGet is a helper used by SaveSettings to detect error responses.
 func jsonGet(body []byte, key string) string {
 	var m map[string]json.RawMessage

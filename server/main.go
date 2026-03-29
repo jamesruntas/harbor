@@ -73,13 +73,14 @@ func main() {
 	thumb      := newThumbnailer(ffmpegPath, thumbDir)
 	movieThumb := newThumbnailer(ffmpegPath, movieThumbDir)
 	broker     := newBroker()
+	bj         := newBackupJob(dataDir)
 
 	if err := startWatcher(s.MediaFolder, exiftoolPath, db, thumb, broker); err != nil {
 		log.Printf("watcher disabled: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	registerHandlers(mux, exiftoolPath, gpthPath, cfg, db, thumb, movieThumb, broker)
+	registerHandlers(mux, exiftoolPath, gpthPath, cfg, db, thumb, movieThumb, broker, bj)
 	handler := AuthMiddleware(cfg.get().APIToken, mux)
 
 	// Local listener — used by the Wails UI
@@ -90,7 +91,13 @@ func main() {
 		}
 	}()
 
-	// tsnet listener — remote access via Tailscale (no router config needed)
+	// tsnet listener — remote access via Tailscale (no router config needed).
+	// Set HARBOR_NO_TSNET=1 in dev to skip this and avoid auth spam.
+	if os.Getenv("HARBOR_NO_TSNET") != "" {
+		log.Print("tsnet disabled (HARBOR_NO_TSNET set) — local only")
+		select {} // block forever; local server goroutine keeps running
+	}
+
 	srv := &tsnet.Server{
 		Hostname: tsHostname,
 		Dir:      tsnetDir, // %AppData%\Harbor\tsnet-state

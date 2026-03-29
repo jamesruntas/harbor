@@ -4,6 +4,7 @@ import {
   IndexFolder, GetIndexStatus, PickFolder,
   GetMovies, IndexMovies, GetMoviesStatus,
   StartTakeout, GetTakeoutStatus, ConfirmTakeout, CancelTakeout,
+  GetBackupDrives, GetBackupStatus, StartBackup,
 } from '../wailsjs/go/main/App'
 
 const MONTH_NAMES = [
@@ -23,6 +24,17 @@ function formatSize(bytes) {
   if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB'
   if (bytes >= 1e6) return (bytes / 1e6).toFixed(0) + ' MB'
   return (bytes / 1e3).toFixed(0) + ' KB'
+}
+
+function formatTimeAgo(isoStr) {
+  if (!isoStr) return 'never'
+  const diff = Date.now() - new Date(isoStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 2) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
 }
 
 function stripExt(filename) {
@@ -81,11 +93,19 @@ function Lightbox({ item, items, streamUrl, onClose, onPrev, onNext }) {
 function SettingsModal({ settings, onSave, onClose }) {
   const [mediaFolder, setMediaFolder] = useState(settings.media_folder || '')
   const [moviesFolder, setMoviesFolder] = useState(settings.movies_folder || '')
+  const [backupDest, setBackupDest]   = useState(settings.backup_dest || '')
+  const [drives, setDrives]           = useState([])
   const [toolsDir, setToolsDir]       = useState(settings.tools_dir || '')
   const [saving, setSaving]           = useState(false)
   const [error, setError]             = useState(null)
   const [copied, setCopied]           = useState(false)
   const token = settings.api_token || ''
+
+  useEffect(() => {
+    GetBackupDrives().then(raw => {
+      try { setDrives(JSON.parse(raw)) } catch {}
+    })
+  }, [])
 
   function copyToken() {
     navigator.clipboard.writeText(token).then(() => {
@@ -107,6 +127,7 @@ function SettingsModal({ settings, onSave, onClose }) {
       const raw = await SaveSettings(JSON.stringify({
         media_folder: mediaFolder,
         movies_folder: moviesFolder,
+        backup_dest: backupDest,
         tools_dir: toolsDir,
         api_token: token,
       }))
@@ -142,6 +163,24 @@ function SettingsModal({ settings, onSave, onClose }) {
               onChange={e => setMoviesFolder(e.target.value)} placeholder="F:\Movies & TV" />
             <button className="setting-pick" onClick={() => pick(setMoviesFolder)}>Browse</button>
           </div>
+
+          <label className="setting-label" style={{ marginTop: 16 }}>Backup Destination</label>
+          <div className="setting-row">
+            <input className="setting-input" value={backupDest}
+              onChange={e => setBackupDest(e.target.value)} placeholder="E:\ or F:\Backup" />
+            <button className="setting-pick" onClick={() => pick(setBackupDest)}>Browse</button>
+          </div>
+          {drives.length > 1 && (
+            <div className="backup-drives">
+              {drives.filter(d => d !== (mediaFolder.slice(0,3) || '')).map(d => (
+                <button key={d} className={`drive-chip ${backupDest.startsWith(d) ? 'active' : ''}`}
+                  onClick={() => setBackupDest(d)}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="setting-hint">Harbor will Robocopy your phone media here on demand. Use an external drive for best protection.</p>
 
           <label className="setting-label" style={{ marginTop: 16 }}>Tools Directory</label>
           <div className="setting-row">
@@ -226,6 +265,52 @@ function Sidebar({ months, filter, onFilter }) {
         )
       })}
     </nav>
+  )
+}
+
+// ── Pairing Modal ─────────────────────────────────────────────────────────────
+
+function PairingModal({ onClose }) {
+  const [info, setInfo] = useState(null)
+
+  useEffect(() => {
+    GetPairingInfo().then(raw => {
+      try { setInfo(JSON.parse(raw)) } catch {}
+    })
+  }, [])
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <span className="modal-title">Pair iPhone</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body" style={{ textAlign: 'center' }}>
+          {!info && <p style={{ color: '#888' }}>Loading…</p>}
+          {info?.error && <p className="setting-error">{info.error}</p>}
+          {info && !info.error && (
+            <>
+              <p style={{ color: '#aaa', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
+                Make sure your iPhone is on the same Wi-Fi network, then scan this QR code in Safari.
+                When prompted, tap <strong style={{ color: '#eee' }}>Visit Website</strong> to trust the local security certificate (one-time only).
+              </p>
+              <img
+                src="http://127.0.0.1:4242/api/pairing/qr"
+                alt="Pairing QR code"
+                style={{ width: 200, height: 200, display: 'block', margin: '0 auto 20px', imageRendering: 'pixelated', borderRadius: 8 }}
+              />
+              <p style={{ fontSize: 11, color: '#555', wordBreak: 'break-all', fontFamily: 'monospace', padding: '0 8px' }}>
+                {info.url}
+              </p>
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="index-btn" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -548,7 +633,11 @@ export default function App() {
   const [settings, setSettings]     = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showTakeout, setShowTakeout]   = useState(false)
-  const pollRef = useRef(null)
+  const [showPairing, setShowPairing]   = useState(false)
+  const [backupStatus, setBackupStatus] = useState(null)
+  const [backing, setBacking]           = useState(false)
+  const pollRef    = useRef(null)
+  const backupPoll = useRef(null)
 
   async function loadMedia(f = filter, retries = 8) {
     try {
@@ -584,12 +673,17 @@ export default function App() {
     try { setSettings(JSON.parse(await GetSettings())) } catch {}
   }
 
-  useEffect(() => { loadMedia(); loadMonths(); loadSettings() }, [])
+  async function loadBackupStatus() {
+    try { setBackupStatus(JSON.parse(await GetBackupStatus())) } catch {}
+  }
+
+  useEffect(() => { loadMedia(); loadMonths(); loadSettings(); loadBackupStatus() }, [])
 
   useEffect(() => {
     const es = new EventSource('http://127.0.0.1:4242/api/events')
     es.onmessage = e => {
-      if (e.data !== 'movies-done') { loadMedia(); loadMonths() }
+      if (e.data === 'backup-done') { loadBackupStatus(); setBacking(false) }
+      else if (e.data !== 'movies-done') { loadMedia(); loadMonths() }
     }
     return () => es.close()
   }, [])
@@ -629,6 +723,12 @@ export default function App() {
     if (selectedIdx < items.length - 1) setSelected(items[selectedIdx + 1])
   }, [selectedIdx, items])
 
+  async function handleBackup() {
+    setBacking(true)
+    await StartBackup()
+    // SSE backup-done will call loadBackupStatus and set backing=false
+  }
+
   const mediaFolder = settings?.media_folder || 'C:\\PhoneMedia'
   const folderLabel = mediaFolder.split(/[\\/]/).pop() || mediaFolder
   const mediaStreamUrl = id => `http://127.0.0.1:4242/api/stream/${id}`
@@ -646,6 +746,14 @@ export default function App() {
               <button className="index-btn secondary" onClick={() => setShowTakeout(true)}>
                 Google Takeout
               </button>
+              <button className="index-btn secondary" onClick={() => setShowPairing(true)}>
+                Pair iPhone
+              </button>
+              {settings?.backup_dest ? (
+                <button className="index-btn secondary backup-btn" onClick={handleBackup} disabled={backing || backupStatus?.status === 'running'}>
+                  {(backing || backupStatus?.status === 'running') ? 'Backing up…' : `Back Up Now`}
+                </button>
+              ) : null}
               <button className="index-btn" onClick={handleIndex} disabled={indexing}>
                 {indexing ? `Indexing… ${indexCount} files` : `Index ${folderLabel}`}
               </button>
@@ -663,6 +771,25 @@ export default function App() {
           Movies &amp; TV
         </button>
       </div>
+
+      {tab === 'media' && !settings?.backup_dest && (
+        <div className="backup-warning-bar">
+          Only 1 copy of your phone media — no backup destination set.{' '}
+          <button className="backup-warning-link" onClick={() => setShowSettings(true)}>
+            Set up backup
+          </button>
+        </div>
+      )}
+      {tab === 'media' && settings?.backup_dest && backupStatus && (
+        <div className="backup-confidence-bar">
+          2 copies
+          <span className="backup-sep">·</span>
+          last backed up {formatTimeAgo(backupStatus.last_backup_at)}
+          {backupStatus.status === 'error' && (
+            <span className="backup-error-inline"> — error: {backupStatus.error}</span>
+          )}
+        </div>
+      )}
 
       <div className="body">
         {tab === 'media' && months.length > 0 && (
@@ -730,6 +857,10 @@ export default function App() {
 
       {showTakeout && (
         <TakeoutModal onClose={() => setShowTakeout(false)} />
+      )}
+
+      {showPairing && (
+        <PairingModal onClose={() => setShowPairing(false)} />
       )}
 
       {showSettings && settings && (

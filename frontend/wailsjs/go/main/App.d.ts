@@ -5,6 +5,10 @@ export function CancelTakeout():Promise<string>;
 
 export function ConfirmTakeout():Promise<string>;
 
+export function GetBackupDrives():Promise<string>;
+
+export function GetBackupStatus():Promise<string>;
+
 export function GetIndexStatus():Promise<string>;
 
 export function GetMedia(arg1:number,arg2:number,arg3:number):Promise<string>;
@@ -26,5 +30,7 @@ export function IndexMovies():Promise<string>;
 export function PickFolder():Promise<string>;
 
 export function SaveSettings(arg1:string):Promise<string>;
+
+export function StartBackup():Promise<string>;
 
 export function StartTakeout(arg1:string):Promise<string>;

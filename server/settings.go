@@ -13,6 +13,7 @@ import (
 type Settings struct {
 	MediaFolder  string `json:"media_folder"`
 	MoviesFolder string `json:"movies_folder"`
+	BackupDest   string `json:"backup_dest"`
 	ToolsDir     string `json:"tools_dir"`
 	APIToken     string `json:"api_token"`
 }

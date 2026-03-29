@@ -10,6 +10,14 @@ export function ConfirmTakeout() {
   return window['go']['main']['App']['ConfirmTakeout']();
 }
 
+export function GetBackupDrives() {
+  return window['go']['main']['App']['GetBackupDrives']();
+}
+
+export function GetBackupStatus() {
+  return window['go']['main']['App']['GetBackupStatus']();
+}
+
 export function GetIndexStatus() {
   return window['go']['main']['App']['GetIndexStatus']();
 }
@@ -52,6 +60,10 @@ export function PickFolder() {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function StartBackup() {
+  return window['go']['main']['App']['StartBackup']();
 }
 
 export function StartTakeout(arg1) {

@@ -98,7 +98,7 @@ func uniquePath(dir, filename string) string {
 	}
 }
 
-func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, cfg *settingsStore, db *sql.DB, thumb *Thumbnailer, movieThumb *Thumbnailer, broker *Broker) {
+func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, cfg *settingsStore, db *sql.DB, thumb *Thumbnailer, movieThumb *Thumbnailer, broker *Broker, bj *backupJob) {
 	j := &job{status: "idle"}
 	tj := newTakeoutJob()
 
@@ -524,4 +524,38 @@ func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, 
 			"filename": filepath.Base(destPath),
 		})
 	})
+
+	// ── Backup ────────────────────────────────────────────────────────────────
+
+	// GET /api/backup/drives — list drive roots currently visible on this machine.
+	mux.HandleFunc("GET /api/backup/drives", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(listDrives())
+	})
+
+	// GET /api/backup/status — current backup job state plus last successful backup time.
+	mux.HandleFunc("GET /api/backup/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(bj.statusMap())
+	})
+
+	// POST /api/backup/start — kick off a Robocopy job from media_folder → backup_dest.
+	mux.HandleFunc("POST /api/backup/start", func(w http.ResponseWriter, r *http.Request) {
+		s := cfg.get()
+		if s.BackupDest == "" {
+			http.Error(w, "backup_dest not configured", http.StatusBadRequest)
+			return
+		}
+		if s.MediaFolder == "" {
+			http.Error(w, "media_folder not configured", http.StatusBadRequest)
+			return
+		}
+		if err := bj.start(s.MediaFolder, s.BackupDest, broker); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"started"}`))
+	})
+
 }

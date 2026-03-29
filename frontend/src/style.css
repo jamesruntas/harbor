@@ -668,3 +668,75 @@ html, body, #app {
   color: var(--text-dim);
   max-width: 300px;
 }
+
+/* ── Backup banner & confidence bar ──────────────────────────────────────── */
+
+.backup-warning-bar {
+  background: #7c3a00;
+  color: #ffd9b3;
+  font-size: 13px;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #a04a00;
+}
+
+.backup-warning-link {
+  background: none;
+  border: none;
+  color: #ffb366;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.backup-confidence-bar {
+  background: #1a2a1a;
+  color: #7db87d;
+  font-size: 12px;
+  padding: 5px 20px;
+  border-bottom: 1px solid #2a3a2a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.backup-sep {
+  color: #4a6a4a;
+}
+
+.backup-error-inline {
+  color: #e07070;
+}
+
+/* ── Drive chips in settings ─────────────────────────────────────────────── */
+
+.backup-drives {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.drive-chip {
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #ccc;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+.drive-chip:hover {
+  border-color: #888;
+  color: #fff;
+}
+
+.drive-chip.active {
+  background: #1a3a5c;
+  border-color: #4a8abf;
+  color: #90c8f0;
+}
