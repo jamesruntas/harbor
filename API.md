@@ -214,7 +214,7 @@ Returns the LAN URL, Tailscale remote URL, and API token — encoded into the pa
 **Response** *(planned)*
 ```json
 {
-  "lan_url": "http://10.88.111.7:4242",
+  "lan_url": "http://192.168.1.50:4242",
   "tailscale_url": "http://harbor",
   "token": "0e21fab4..."
 }

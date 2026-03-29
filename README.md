@@ -152,11 +152,10 @@ Default recommendation is both:
 
 **Cloud backup (Backblaze B2):** deferred to Phase 3 as optional community plugin. Reintroduces subscription and cloud dependency — contradicts core premise for most users.
 
-### iOS Remote Access — No Tailscale App Required
-The final iOS app will **not** require Tailscale installed on the iPhone:
-- **LAN (same WiFi):** server binds `0.0.0.0`, iOS app uses plain HTTP with `NSAllowsLocalNetworking`
-- **Remote:** tsnet runs inside the server process; iOS app connects via the tsnet Tailscale IP — no Tailscale app on the phone needed
-- Native apps can use plain HTTP on LAN; self-signed cert complexity only applies to browser-based access (not pursued)
+### iOS Remote Access
+- **LAN (same WiFi):** server binds `0.0.0.0:4242`, iOS app uses plain HTTP — no TLS needed (`NSAllowsLocalNetworking` in Info.plist)
+- **Remote:** tsnet runs inside the server process. Phase 2 requires Tailscale installed on the iPhone (same account). Phase 3 goal: remove the Tailscale app requirement via Tailscale Funnel or an alternative relay.
+- Native apps can use plain HTTP on LAN; self-signed cert complexity is a browser-only concern and is not pursued.
 
 ### Google vs iCloud Positioning
 
@@ -184,7 +183,7 @@ Pre-build validation before writing production code. All critical items done.
 
 **Homelab tasks**
 - [x] Go + Wails hello-world — window opens, React renders, hot reload works
-- [x] ExifTool → SQLite core loop — indexing `C:\PhoneMedia`, DB rows confirmed
+- [x] ExifTool → SQLite core loop — indexing phone media folder, DB rows confirmed
 - [x] tsnet proof of concept — server authenticates to Tailscale, reachable at `http://harbor/` with no router config
 - [ ] Tailscale direct connection — fix relay via UDP port 41641 *(non-blocking, deferred)*
 
@@ -259,14 +258,16 @@ Pre-build validation before writing production code. All critical items done.
 
 ---
 
-### Phase 2 — iOS App *(next)*
+### Phase 2 — iOS App *(in progress)*
 
 **Success criterion:** user views home photo library and streams a movie from mobile data.
 
 #### Server — iOS Readiness
-- [ ] LAN access — bind `0.0.0.0`, firewall rule, `NSAllowsLocalNetworking` HTTP (no TLS needed for native app)
-- [ ] QR code pairing endpoint — `GET /api/pairing` returns `{url, token}` for the iOS app to scan and configure itself
-- [ ] Auth token displayed in Settings for manual entry fallback
+- [x] LAN access — server binds `0.0.0.0:4242`, Windows Firewall rule in place, plain HTTP (no TLS needed for native app)
+- [x] `GET /api/pairing` — returns `{lan_url, tailscale_url, token}` for QR pairing on first launch
+- [x] Auth token displayed in Settings (copy button) for manual entry fallback
+- [x] Path traversal fix on `POST /api/upload` — `filepath.Base()` applied to client-supplied filename
+- [x] API documented in `API.md`
 
 #### iOS App
 - [ ] Xcode project setup, Swift + SwiftUI
@@ -329,7 +330,7 @@ harbor\                          ← Wails UI binary (Go 1.23)
 │       ├── App.js               ← Wails JS bindings (hand-maintained)
 │       └── App.d.ts
 └── server\                      ← Go server binary (Go 1.26.1)
-    ├── main.go                  ← Starts local 127.0.0.1:4242 listener + tsnet remote listener
+    ├── main.go                  ← Starts local 0.0.0.0:4242 listener + tsnet remote listener
     ├── db.go                    ← SQLite init (media + movies tables)
     ├── settings.go              ← Settings struct, load/save settings.json
     ├── indexer.go               ← ExifTool integration, filepath.Walk, DB inserts
@@ -362,7 +363,7 @@ Wails UI (harbor.exe)
     │  app.go spawns server.exe as child process on startup
     │  app.go kills server.exe on Wails window close
     │
-    ↓ HTTP on 127.0.0.1:4242
+    ↓ HTTP on 0.0.0.0:4242
 server.exe
     │
     ├── GET  /api/media?year=N&month=N&offset=N  → paginated JSON, filtered by date
@@ -384,6 +385,7 @@ server.exe
     ├── POST /api/takeout/confirm                 → approve preview, begin file copy
     ├── POST /api/takeout/cancel                  → cancel at preview, clean up temp files
     ├── POST /api/upload                          → receive single file from iOS (multipart), index immediately
+    ├── GET  /api/pairing                         → {lan_url, tailscale_url, token} for QR pairing
     ├── GET  /api/backup/drives                   → list drive roots on this machine
     ├── GET  /api/backup/status                   → {status, last_backup_at, error}
     └── POST /api/backup/start                    → run Robocopy media_folder → backup_dest
@@ -421,8 +423,8 @@ http://harbor/                      → same API, auth via Bearer token header
 ```json
 {
   "media_folder": "C:\\PhoneMedia",
-  "movies_folder": "F:\\Movies & TV",
-  "backup_dest": "F:\\iPhone-Media-Backup",
+  "movies_folder": "D:\\Movies",
+  "backup_dest": "E:\\Backup",
   "tools_dir": "",
   "api_token": "<32-char hex, generated on first run>"
 }
@@ -457,8 +459,8 @@ CREATE TABLE IF NOT EXISTS movies (
 
 ```powershell
 # Terminal 1 — build and start the server
-$env:HARBOR_TOOLS = "C:\Users\James\HarborTools"
-$env:HARBOR_NO_TSNET = "1"   # skip Tailscale auth in dev
+$env:HARBOR_TOOLS = "C:\path\to\HarborTools"   # folder containing exiftool.exe, ffmpeg.exe, gpth.exe
+$env:HARBOR_NO_TSNET = "1"                      # skip Tailscale auth in dev
 cd server
 go build -o server.exe .
 .\server.exe
@@ -487,10 +489,10 @@ After changing `app.go` or `main.go`: `wails dev` recompiles Go automatically.
 | FFmpeg | BtbN LGPL static build |
 | GPTH | Latest release — `gpth.exe` in `HarborTools\` |
 | TDM-GCC | Latest — required for go-sqlite3 CGO compilation |
-| Project path | `C:\Users\James\harbor` |
-| AppData path | `C:\Users\James\AppData\Roaming\Harbor\` |
-| Media folder | `C:\PhoneMedia` |
-| Movies folder | `F:\Movies_TV\...` |
+| Project path | `%USERPROFILE%\harbor` |
+| AppData path | `%APPDATA%\Harbor\` |
+| Media folder | configured via Settings (e.g. `C:\PhoneMedia`) |
+| Movies folder | configured via Settings (e.g. `D:\Movies`) |
 | tsnet hostname | `harbor` (reachable at `http://harbor/` on Tailscale) |
 
 ### Go Module Dependencies
@@ -530,7 +532,7 @@ tailscale.com/tsnet               — Embedded Tailscale node
 
 - **Movie thumbnail reliability** *(known issue)* — FFmpeg first-frame extraction is reliable for MP4/MOV but fails silently on some MKV files. Fix: probe with `-ss 00:00:05` offset, retry on failure.
 
-- **File watcher is non-recursive** — watches the top-level media folder only. Subdirectories added after startup are not watched. Assumption: `C:\PhoneMedia` is flat (Syncthing default layout).
+- **File watcher is non-recursive** — watches the top-level media folder only. Subdirectories added after startup are not watched. Assumption: media folder is flat (Syncthing default layout).
 
 - **Snapchat filenames** — iOS saves Snapchat videos with colons in filenames (reserved on Windows). Must sanitise at ingestion *(not yet implemented)*.
 
@@ -546,25 +548,25 @@ tailscale.com/tsnet               — Embedded Tailscale node
 
 Phase 1 Windows core is functionally complete. The installer is the only remaining Phase 1 item, but it is **not blocking iOS development** — dev builds can run directly.
 
-### Before starting iOS app (light touch — 1–2 hours)
+### Server — iOS Readiness ✅ Complete
 
-1. **LAN binding** — change server `localAddr` from `127.0.0.1:4242` to `0.0.0.0:4242` and add Windows Firewall rule for port 4242. Required so the iOS app can reach the server on the same WiFi network.
+All server-side prerequisites are done. iOS app development can begin.
 
-2. **QR pairing endpoint** — add `GET /api/pairing` returning `{url, token}`. The iOS app scans this QR on first launch to configure itself. No browser UI needed — just the JSON endpoint and a QR image endpoint.
+### iOS App (Phase 2)
 
-### iOS app work (Phase 2)
+1. **Xcode project** — Swift + SwiftUI, target iOS 16+. New repo.
 
-3. **Xcode project** — Swift + SwiftUI, target iOS 16+.
+2. **QR scanner + pairing flow** — first-launch screen scans QR code shown on desktop (encoding `GET /api/pairing` response), stores `lan_url`, `tailscale_url`, and `api_token` in Keychain. No hardcoded network configuration.
 
-4. **QR scanner + pairing flow** — first-launch screen, scan QR, store `serverURL` + `apiToken` in Keychain.
+3. **Photo browser** — `GET /api/media` + `GET /api/thumbnail/{id}`, SwiftUI LazyVGrid, month sidebar matching desktop layout.
 
-5. **Photo browser** — `GET /api/media` + `GET /api/thumbnail/{id}`, SwiftUI LazyVGrid, month sidebar.
+4. **Full-size view + video player** — AVPlayer, `GET /api/stream/{id}` with range requests for seeking.
 
-6. **Video player** — AVPlayer, `GET /api/stream/{id}` with range request.
+5. **Upload** — `POST /api/upload` multipart, background URLSession task, upload queue with retry.
 
-7. **Upload** — `POST /api/upload` multipart, background URLSession task.
+6. **Movies tab** — `GET /api/movies` + AVPlayer streaming.
 
-8. **Movies tab** — `GET /api/movies` + AVPlayer streaming.
+7. **SSE live updates** — `GET /api/events` for real-time sync status.
 
 ### Deferred (not blocking iOS)
 

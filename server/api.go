@@ -84,6 +84,19 @@ func AuthMiddleware(token string, next http.Handler) http.Handler {
 	})
 }
 
+// getLANIP returns the local IP the OS would use to reach the internet —
+// a UDP dial triggers a routing-table lookup without sending any packets.
+func getLANIP() string {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err == nil {
+		defer conn.Close()
+		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			return addr.IP.String()
+		}
+	}
+	return "localhost"
+}
+
 // uniquePath returns a path that does not yet exist on disk.
 // If dir/filename is taken it tries dir/base_1.ext, dir/base_2.ext, …
 func uniquePath(dir, filename string) string {
@@ -522,6 +535,22 @@ func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, 
 			"status":   "ok",
 			"id":       newID,
 			"filename": filepath.Base(destPath),
+		})
+	})
+
+	// ── Pairing ───────────────────────────────────────────────────────────────
+
+	// GET /api/pairing — returns LAN URL, Tailscale URL, and token for iOS QR pairing.
+	// The iOS app scans a QR code encoding this URL once on first launch, then stores
+	// the result in Keychain — no hardcoded network configuration needed.
+	mux.HandleFunc("GET /api/pairing", func(w http.ResponseWriter, r *http.Request) {
+		ip := getLANIP()
+		token := cfg.get().APIToken
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"lan_url":       "http://" + ip + ":4242",
+			"tailscale_url": "http://harbor",
+			"token":         token,
 		})
 	})
 

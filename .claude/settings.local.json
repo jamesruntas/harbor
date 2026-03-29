@@ -5,7 +5,9 @@
       "Bash(go build:*)",
       "Bash(go get:*)",
       "Bash(netstat -ano)",
-      "Bash(netsh advfirewall:*)"
+      "Bash(netsh advfirewall:*)",
+      "Bash(grep -rn .env c:UsersJamesharbor --include=*.go --include=*.jsx --include=*.json)",
+      "Bash(find c:UsersJamesharbor -maxdepth 3 -type f \\\\\\(-name .env* -o -name *.key -o -name *.pem -o -name *.secret -o -name config.json \\\\\\))"
     ]
   }
 }
