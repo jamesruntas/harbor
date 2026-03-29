@@ -491,7 +491,7 @@ func registerHandlers(mux *http.ServeMux, exiftoolPath string, gpthPath string, 
 			return
 		}
 
-		destPath := uniquePath(mediaFolder, header.Filename)
+		destPath := uniquePath(mediaFolder, filepath.Base(header.Filename))
 		dst, err := os.Create(destPath)
 		if err != nil {
 			http.Error(w, "cannot save file: "+err.Error(), http.StatusInternalServerError)

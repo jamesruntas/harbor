@@ -268,52 +268,6 @@ function Sidebar({ months, filter, onFilter }) {
   )
 }
 
-// ── Pairing Modal ─────────────────────────────────────────────────────────────
-
-function PairingModal({ onClose }) {
-  const [info, setInfo] = useState(null)
-
-  useEffect(() => {
-    GetPairingInfo().then(raw => {
-      try { setInfo(JSON.parse(raw)) } catch {}
-    })
-  }, [])
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span className="modal-title">Pair iPhone</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body" style={{ textAlign: 'center' }}>
-          {!info && <p style={{ color: '#888' }}>Loading…</p>}
-          {info?.error && <p className="setting-error">{info.error}</p>}
-          {info && !info.error && (
-            <>
-              <p style={{ color: '#aaa', fontSize: 13, marginBottom: 20, lineHeight: 1.5 }}>
-                Make sure your iPhone is on the same Wi-Fi network, then scan this QR code in Safari.
-                When prompted, tap <strong style={{ color: '#eee' }}>Visit Website</strong> to trust the local security certificate (one-time only).
-              </p>
-              <img
-                src="http://127.0.0.1:4242/api/pairing/qr"
-                alt="Pairing QR code"
-                style={{ width: 200, height: 200, display: 'block', margin: '0 auto 20px', imageRendering: 'pixelated', borderRadius: 8 }}
-              />
-              <p style={{ fontSize: 11, color: '#555', wordBreak: 'break-all', fontFamily: 'monospace', padding: '0 8px' }}>
-                {info.url}
-              </p>
-            </>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button className="index-btn" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Takeout Modal ──────────────────────────────────────────────────────────────
 
 function TakeoutModal({ onClose }) {
@@ -633,7 +587,6 @@ export default function App() {
   const [settings, setSettings]     = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [showTakeout, setShowTakeout]   = useState(false)
-  const [showPairing, setShowPairing]   = useState(false)
   const [backupStatus, setBackupStatus] = useState(null)
   const [backing, setBacking]           = useState(false)
   const pollRef    = useRef(null)
@@ -746,9 +699,6 @@ export default function App() {
               <button className="index-btn secondary" onClick={() => setShowTakeout(true)}>
                 Google Takeout
               </button>
-              <button className="index-btn secondary" onClick={() => setShowPairing(true)}>
-                Pair iPhone
-              </button>
               {settings?.backup_dest ? (
                 <button className="index-btn secondary backup-btn" onClick={handleBackup} disabled={backing || backupStatus?.status === 'running'}>
                   {(backing || backupStatus?.status === 'running') ? 'Backing up…' : `Back Up Now`}
@@ -859,9 +809,6 @@ export default function App() {
         <TakeoutModal onClose={() => setShowTakeout(false)} />
       )}
 
-      {showPairing && (
-        <PairingModal onClose={() => setShowPairing(false)} />
-      )}
 
       {showSettings && settings && (
         <SettingsModal

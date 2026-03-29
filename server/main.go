@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	localAddr  = "127.0.0.1:4242"
+	localAddr  = "0.0.0.0:4242"
 	tsHostname = "harbor"
 )
 
