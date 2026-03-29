@@ -18,6 +18,7 @@ The token is in `%AppData%\Harbor\settings.json` → `api_token`. Display it in 
 | Wails desktop UI | Loopback (`127.0.0.1`) — no token required |
 | iOS app (LAN) | `Authorization: Bearer <token>` header |
 | iOS app (remote) | `Authorization: Bearer <token>` header over Tailscale |
+| Browser (any) | ❌ Always `401 Unauthorized` — browsers cannot set `Authorization` headers on plain URL navigation. This is expected. The server has no web UI for external clients; that is the iOS app's job. |
 
 ---
 
