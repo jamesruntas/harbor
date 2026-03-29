@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "Bash(go mod:*)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(go get:*)",
+      "Bash(netstat -ano)",
+      "Bash(netsh advfirewall:*)"
     ]
   }
 }
